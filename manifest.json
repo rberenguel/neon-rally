@@ -1,6 +1,7 @@
 {
   "name": "Neon Rally",
   "short_name": "Neon Rally",
+  "version": "0.9.0",
   "description": "Top-down neon racing game",
   "icons": [
     {

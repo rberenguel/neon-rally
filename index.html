@@ -25,6 +25,35 @@
             position: absolute;
             top: 0; left: 0;
         }
+        #update-banner {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(5, 5, 16, 0.95);
+            color: #00FFFF;
+            padding: 8px 12px;
+            text-align: center;
+            font-family: monospace;
+            font-size: 13px;
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+        #update-banner a {
+            color: #00FFFF;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        #update-close {
+            position: absolute;
+            right: 12px;
+            color: #00FFFF88;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+        }
+        #update-close:hover { color: #00FFFF; }
     </style>
     <script src="libs/Tone.js"></script>
     <script type="importmap">
@@ -37,6 +66,40 @@
     </script>
 </head>
 <body>
-    <script type="module" src="app.js"></script>
+    <div id="update-banner">
+        <span>Update available — <a href="#" id="update-link">reload</a></span>
+        <span id="update-close">&#x2715;</span>
+    </div>
+
+    <script type="module" src="src/app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(registration => {
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            if (!newWorker) return;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'activated' && navigator.serviceWorker.controller) {
+                                    const banner = document.getElementById('update-banner');
+                                    banner.style.display = 'flex';
+                                }
+                            });
+                        });
+                    })
+                    .catch(err => console.error('SW registration failed:', err));
+            });
+
+            document.getElementById('update-link').addEventListener('click', e => {
+                e.preventDefault();
+                window.location.reload();
+            });
+
+            document.getElementById('update-close').addEventListener('click', () => {
+                document.getElementById('update-banner').style.display = 'none';
+            });
+        }
+    </script>
 </body>
 </html>

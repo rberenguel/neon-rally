@@ -1,6 +1,6 @@
 export { keyMap, buttonMap, rmap, makeControlHandler, presentKeyMap, commandNames };
 
-import { bindGamepadHandlers, bindKeyHandlers, handleControls, getDeviceInput } from './libs/controlHandling.js';
+import { bindGamepadHandlers, bindKeyHandlers, handleControls, getDeviceInput } from '../libs/controlHandling.js';
 
 bindKeyHandlers();
 bindGamepadHandlers();

@@ -71,25 +71,31 @@ export function generateTrack(difficulty = 0.5, attempt = 0, seedOrId = null) {
     // Never self-intersects. Visual complexity = number and size of harmonics.
     const baseR = 920;
 
-    // Smooth: k=1 (ellipse) + maybe k=2; small amplitude → clean oval
-    // Technical: k=2..4, medium amplitude → chicanes and corners
-    // Chaotic: k=2..7, large amplitude → very irregular
+    // Smooth: 3–4 harmonics, medium amplitude → nice and curvy
+    // Technical: 5–7 harmonics, moderate amplitude → complex and curvy
+    // Chaotic: 7–9 harmonics, large amplitude → wild and irregular
     let harmonics;
     if (difficulty < 0.35) {
-        const ellipseAmp = 150 + rng() * 230;      // 150–380: noticeable ellipse
-        harmonics = [{ k: 1, amp: ellipseAmp, phase: rng() * Math.PI * 2 }];
-        if (rng() > 0.4) harmonics.push({ k: 2, amp: 80 + rng() * 100, phase: rng() * Math.PI * 2 });
-    } else if (difficulty < 0.65) {
+        // Smooth: what used to be Technical — nice and curvy
         harmonics = [];
         const nH = 3 + Math.floor(rng() * 2);       // 3–4 harmonics
         const totalAmp = 380 + rng() * 170;          // total variation budget
         for (let k = 2; k <= nH + 1; k++) {
             harmonics.push({ k, amp: (totalAmp / nH) * (0.6 + rng() * 0.8), phase: rng() * Math.PI * 2 });
         }
-    } else {
+    } else if (difficulty < 0.65) {
+        // Technical: what used to be Chaotic — complex and curvy
         harmonics = [];
         const nH = 5 + Math.floor(rng() * 3);       // 5–7 harmonics
-        const totalAmp = 340 + rng() * 120;          // kept moderate so spline AI can follow
+        const totalAmp = 340 + rng() * 120;
+        for (let k = 2; k <= nH + 1; k++) {
+            harmonics.push({ k, amp: (totalAmp / nH) * (0.6 + rng() * 0.8), phase: rng() * Math.PI * 2 });
+        }
+    } else {
+        // Chaotic: wilder — more harmonics, larger amplitude
+        harmonics = [];
+        const nH = 7 + Math.floor(rng() * 3);       // 7–9 harmonics
+        const totalAmp = 420 + rng() * 160;          // bigger variation budget
         for (let k = 2; k <= nH + 1; k++) {
             harmonics.push({ k, amp: (totalAmp / nH) * (0.6 + rng() * 0.8), phase: rng() * Math.PI * 2 });
         }

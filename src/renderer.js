@@ -136,6 +136,7 @@ export function initParticles() {
 export function initSkids() {
     const graphics = new Graphics();
     let segments = [];
+    const MAX_SEGMENTS = 2000;
 
     function emitSeg(x1, y1, x2, y2) {
         segments.push({ x1, y1, x2, y2, age: 0 });
@@ -152,6 +153,9 @@ export function initSkids() {
         const skidColor = PALETTE[(idx + 3) % PALETTE.length];
         segments.forEach(s => s.age++);
         segments = segments.filter(s => s.age < 600);
+        if (segments.length > MAX_SEGMENTS) {
+            segments = segments.slice(segments.length - MAX_SEGMENTS);
+        }
         graphics.clear();
         for (const s of segments) {
             const alpha = Math.max(0, 1 - s.age / 2400);
