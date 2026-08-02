@@ -71,31 +71,13 @@ export function updateCarSprite(sprite, car, slip, turnSign, movingForward, stee
 }
 
 export function initParticles() {
-    const canvas = document.createElement('canvas');
-    canvas.style.position = 'absolute';
-    canvas.style.top = '0';
-    canvas.style.left = '0';
-    canvas.style.pointerEvents = 'none';
-    canvas.style.zIndex = '10';
-    document.body.appendChild(canvas);
-    const ctx = canvas.getContext('2d');
-
-    function resize() {
-        const dpr = window.devicePixelRatio;
-        canvas.width = window.innerWidth * dpr;
-        canvas.height = window.innerHeight * dpr;
-        canvas.style.width = window.innerWidth + 'px';
-        canvas.style.height = window.innerHeight + 'px';
-    }
-    resize();
-    window.addEventListener('resize', resize);
-
+    const graphics = new Graphics();
+    const COLORS = [0xFFFFFF, 0x00FFFF, 0xFF00FF, 0xFF7800];
     let particles = [];
 
     function emit(wx, wy, carVx, carVy) {
         const angle = Math.atan2(carVy, carVx) + Math.PI + (Math.random() - 0.5) * 1.5;
         const spd = 1 + Math.random() * 3;
-        const colors = ['255,255,255,', '0,255,255,', '255,0,255,', '255,120,0,'];
         particles.push({
             wx, wy,
             vx: Math.cos(angle) * spd,
@@ -103,13 +85,12 @@ export function initParticles() {
             alpha: 0.6 + Math.random() * 0.4,
             decay: 0.02 + Math.random() * 0.03,
             radius: 1 + Math.random() * 3,
-            color: colors[Math.floor(Math.random() * colors.length)],
+            color: COLORS[Math.floor(Math.random() * COLORS.length)],
         });
     }
 
-    function draw(camX, camY, zoom = 1) {
-        const dpr = window.devicePixelRatio;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    function draw() {
+        graphics.clear();
         for (let i = particles.length - 1; i >= 0; i--) {
             const p = particles[i];
             p.wx += p.vx;
@@ -117,20 +98,12 @@ export function initParticles() {
             p.vx *= 0.94;
             p.vy *= 0.94;
             p.alpha -= p.decay;
-            if (p.alpha <= 0) {
-                particles.splice(i, 1);
-                continue;
-            }
-            const sx = (p.wx * zoom + camX) * dpr;
-            const sy = (p.wy * zoom + camY) * dpr;
-            ctx.beginPath();
-            ctx.arc(sx, sy, p.radius * zoom * dpr, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(${p.color} ${p.alpha})`;
-            ctx.fill();
+            if (p.alpha <= 0) { particles.splice(i, 1); continue; }
+            graphics.circle(p.wx, p.wy, p.radius).fill({ color: p.color, alpha: p.alpha });
         }
     }
 
-    return { canvas, emit, draw };
+    return { graphics, emit, draw };
 }
 
 export function initSkids() {
@@ -138,8 +111,8 @@ export function initSkids() {
     let segments = [];
     const MAX_SEGMENTS = 2000;
 
-    function emitSeg(x1, y1, x2, y2) {
-        segments.push({ x1, y1, x2, y2, age: 0 });
+    function emitSeg(x1, y1, x2, y2, onTrack = true) {
+        segments.push({ x1, y1, x2, y2, age: 0, onTrack });
     }
 
     function clear() {
@@ -148,22 +121,35 @@ export function initSkids() {
     }
 
     const PALETTE = [0x00FFFF, 0xFF00FF, 0x00FF00, 0xFF8000, 0xFFFF00, 0x8000FF];
-    function draw(isOnTrackFn, trackColor = 0x00FFFF) {
+    function draw(trackColor = 0x00FFFF) {
         const idx = PALETTE.indexOf(trackColor);
         const skidColor = PALETTE[(idx + 3) % PALETTE.length];
-        segments.forEach(s => s.age++);
-        segments = segments.filter(s => s.age < 600);
+        for (let i = 0; i < segments.length; i++) segments[i].age++;
+        for (let i = segments.length - 1; i >= 0; i--) {
+            if (segments[i].age >= 600) segments.splice(i, 1);
+        }
         if (segments.length > MAX_SEGMENTS) {
-            segments = segments.slice(segments.length - MAX_SEGMENTS);
+            segments.splice(0, segments.length - MAX_SEGMENTS);
         }
         graphics.clear();
+        const onBuckets  = [[], [], [], [], [], [], [], []];
+        const offBuckets = [[], [], [], [], [], [], [], []];
         for (const s of segments) {
             const alpha = Math.max(0, 1 - s.age / 2400);
-            const onSeg = isOnTrackFn((s.x1 + s.x2) * 0.5, (s.y1 + s.y2) * 0.5);
-            const segAlpha = onSeg ? alpha * 0.25 : alpha * 0.15;
-            graphics.moveTo(s.x1, s.y1);
-            graphics.lineTo(s.x2, s.y2);
-            graphics.stroke({ width: 2, color: skidColor, alpha: segAlpha });
+            if (alpha === 0) continue;
+            const bucket = Math.min(7, Math.floor(alpha * 8));
+            (s.onTrack ? onBuckets : offBuckets)[bucket].push(s);
+        }
+        for (let b = 0; b < 8; b++) {
+            const bucketAlpha = (b + 0.5) / 8;
+            if (onBuckets[b].length > 0) {
+                for (const s of onBuckets[b]) { graphics.moveTo(s.x1, s.y1); graphics.lineTo(s.x2, s.y2); }
+                graphics.stroke({ width: 2, color: skidColor, alpha: bucketAlpha * 0.25 });
+            }
+            if (offBuckets[b].length > 0) {
+                for (const s of offBuckets[b]) { graphics.moveTo(s.x1, s.y1); graphics.lineTo(s.x2, s.y2); }
+                graphics.stroke({ width: 2, color: skidColor, alpha: bucketAlpha * 0.15 });
+            }
         }
     }
 

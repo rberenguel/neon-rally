@@ -22,8 +22,8 @@ function emitCarEffects(car, state, slipThreshold, skids, particles) {
   const rry = car.y + rearY * 10 + rightY * 8;
 
   if (state.speed > 2 && state.slip > slipThreshold && car._prevLrx !== undefined) {
-    skids.emitSeg(car._prevLrx, car._prevLry, lrx, lry);
-    skids.emitSeg(car._prevRrx, car._prevRry, rrx, rry);
+    skids.emitSeg(car._prevLrx, car._prevLry, lrx, lry, state.onTrack);
+    skids.emitSeg(car._prevRrx, car._prevRry, rrx, rry, state.onTrack);
   }
   car._prevLrx = lrx; car._prevLry = lry;
   car._prevRrx = rrx; car._prevRry = rry;
@@ -74,7 +74,10 @@ export function startGameLoop() {
     const brake = S.player.invertControls ? S.input.gas   : S.input.brake;
 
     // --- RACE START ---
-    if (!S.raceStarted && gas && S.controlsAcknowledged) {
+    const wantsStart = S._isMobile
+      ? (S.input.activate && S._activateCooldown === 0)
+      : gas;
+    if (!S.raceStarted && wantsStart && S.controlsAcknowledged) {
       S.raceStarted = true;
       S.raceFrame = 0;
       S._splitFrames = [null, null, null];
@@ -312,19 +315,21 @@ export function startGameLoop() {
       for (let i = 0; i < S.aiCars.length; i++) {
         emitCarEffects(S.aiCars[i], aiStates[i], 0.5, S.skids, S.particles);
       }
-      S.skids.draw((x, y) => isOnTrack(x, y, S.trackCenterline), S.trackColor);
-      S.particles.draw(cam.x, cam.y, S.ZOOM);
+      S.skids.draw(S.trackColor);
+      S.particles.draw();
 
       // --- DEBUG & HUD UPDATES ---
-      let dbg = '<b>RACE DEBUG</b><br>';
-      for (const c of S.allCars) {
-        const name = c === S.player ? 'PLAYER' : getColorName(c.color);
-        const on = isOnTrack(c.x, c.y, S.trackCenterline) ? 'ON' : 'OFF';
-        const idx = c._trackIdx !== undefined ? c._trackIdx : '?';
-        const prog = (c.lap + (c._trackIdx || 0) / 1000).toFixed(3);
-        dbg += `${name}: lap=${c.lap} idx=${idx} prog=${prog} ${on}<br>`;
+      if (debugDiv.style.display !== 'none') {
+        let dbg = '<b>RACE DEBUG</b><br>';
+        for (const c of S.allCars) {
+          const name = c === S.player ? 'PLAYER' : getColorName(c.color);
+          const on = isOnTrack(c.x, c.y, S.trackCenterline) ? 'ON' : 'OFF';
+          const idx = c._trackIdx !== undefined ? c._trackIdx : '?';
+          const prog = (c.lap + (c._trackIdx || 0) / 1000).toFixed(3);
+          dbg += `${name}: lap=${c.lap} idx=${idx} prog=${prog} ${on}<br>`;
+        }
+        debugDiv.innerHTML = dbg;
       }
-      debugDiv.innerHTML = dbg;
       speedHud.textContent = `${pState.speed.toFixed(1)}`;
       if (S.player._heldPowerup) {
         powerupHud.style.display = 'block';

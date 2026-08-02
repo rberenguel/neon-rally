@@ -247,6 +247,7 @@ setupPwaBanner();
 
 // --- 13. PARTICLES ---
 S.particles = initParticles();
+S.world.addChild(S.particles.graphics);
 
 // --- 14. FPS CAP ---
 S.app.ticker.maxFPS = 45;
