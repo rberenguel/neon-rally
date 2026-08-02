@@ -11,11 +11,12 @@ import { initTouchControls } from './touch.js';
 import { showTrackSelect } from './menu.js';
 import { S } from './state.js';
 import { rebuildTrack, warmUpAI, placeAllCars } from './trackManager.js';
-import { initHud, dismissControls, parseHash, decodeChallenge, setupPwaBanner, controlsDiv, debugDiv } from './hud.js';
+import { initHud, initOrientationGuard, dismissControls, parseHash, decodeChallenge, setupPwaBanner, controlsDiv, debugDiv } from './hud.js';
 import { startGameLoop } from './gameLoop.js';
 import { createRng } from './track.js';
 
-// --- 0. SPLASH ---
+// --- 0. ORIENTATION GUARD + SPLASH ---
+initOrientationGuard();
 await showSplash();
 
 // --- 1. PIXI SETUP ---

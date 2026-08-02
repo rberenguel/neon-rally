@@ -65,7 +65,11 @@ function drawTrackLine(ctx, points, x, y, w, h) {
     ctx.restore();
 }
 
-export function generateSessionCanvas(races) {
+export async function generateSessionCanvas(races) {
+    await Promise.all([
+        document.fonts.load('22px "Sixtyfour"'),
+        document.fonts.load('14px "Phosphor-Light"'),
+    ]);
     const CARD_W = 180, MAP_H = 118, STATS_H = 95, CARD_H = MAP_H + STATS_H;
     const GAP = 14, PAD = 22;
     const HEADER_H = 76, FOOTER_H = 50;
@@ -82,13 +86,15 @@ export function generateSessionCanvas(races) {
     ctx.fillRect(0, 0, W, H);
 
     ctx.textAlign = 'center';
-    ctx.font = 'bold 22px monospace';
+    ctx.font = '22px "Sixtyfour", monospace';
     ctx.fillStyle = '#FFFFFF';
     ctx.fillText('NEON RALLY', W / 2, 32);
 
     ctx.font = '11px monospace';
     ctx.fillStyle = '#00FFFF';
-    ctx.fillText(`SESSION COMPLETE  ·  ${new Date().toLocaleDateString()}`, W / 2, 52);
+    const d = new Date();
+    const dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+    ctx.fillText(`SESSION COMPLETE  ·  ${dateStr}`, W / 2, 52);
 
     ctx.beginPath();
     ctx.moveTo(PAD, 63); ctx.lineTo(W - PAD, 63);
@@ -127,9 +133,23 @@ export function generateSessionCanvas(races) {
         ctx.fillStyle = '#FFD700';
         ctx.fillText(formatTime(race.timeFrames), tx, ty); ty += 17;
 
-        ctx.font = '12px monospace';
-        ctx.fillStyle = race.rank === 1 ? '#00FF88' : '#AAAAAA';
-        ctx.fillText(ordinal(race.rank) + ' place', tx, ty); ty += 14;
+        const RANK_ICONS  = ['', '', ''];
+        const RANK_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'];
+        if (race.rank <= 3) {
+            const label = ordinal(race.rank) + ' place';
+            ctx.font = '12px monospace';
+            ctx.fillStyle = RANK_COLORS[race.rank - 1];
+            ctx.fillText(label, tx, ty);
+            const labelW = ctx.measureText(label).width;
+            const spaceW = ctx.measureText(' ').width;
+            ctx.font = '14px "Phosphor-Light"';
+            ctx.fillText(RANK_ICONS[race.rank - 1], tx + labelW + spaceW, ty + 2);
+        } else {
+            ctx.font = '12px monospace';
+            ctx.fillStyle = '#AAAAAA';
+            ctx.fillText(ordinal(race.rank) + ' place', tx, ty);
+        }
+        ty += 14;
 
         ctx.font = '10px monospace';
         ctx.fillStyle = '#444';
@@ -155,8 +175,8 @@ export function generateSessionCanvas(races) {
 }
 
 export function showSessionSummary(races) {
-    return new Promise(resolve => {
-        const canvas = generateSessionCanvas(races);
+    return new Promise(async resolve => {
+        const canvas = await generateSessionCanvas(races);
         const dataUrl = canvas.toDataURL('image/png');
 
         const overlay = document.createElement('div');

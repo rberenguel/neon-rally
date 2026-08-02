@@ -4,7 +4,7 @@ import { updateCarPhysics } from './car.js';
 import { updateCarSprite, updateCamera, shakeOnBump, updateShake } from './renderer.js';
 import { updateWaypointAI, updateSplineAI, resolveCollisions, computeDraftBoost, recordOffTrackEpisode } from './ai.js';
 import { spawnPowerup, updatePowerups, tickBoosts, activatePowerup, resetPowerupRng } from './powerups.js';
-import { dismissControls, lapDiv, deltaDiv, powerupHud, speedHud, debugDiv, labelDivs, showAnnounce, showLabels, updateMinimap, formatTime, challengeDelta, encodeChallenge, showFinishedOverlay } from './hud.js';
+import { dismissControls, orientationDiv, lapDiv, deltaDiv, powerupHud, speedHud, debugDiv, labelDivs, showAnnounce, showLabels, updateMinimap, formatTime, challengeDelta, encodeChallenge, showFinishedOverlay } from './hud.js';
 import { getRaceProgress, getLeader, getColorName, advanceToNextTrack, endSession } from './race.js';
 import { isRemapping } from './controls.js';
 import { seedToTrackId } from './track.js';
@@ -40,12 +40,11 @@ function emitCarEffects(car, state, slipThreshold, skids, particles) {
 export function startGameLoop() {
   S.app.ticker.add((ticker) => {
     const dt = ticker.deltaTime;
-    if (S.paused) return;
 
-    // --- CONTROLS ---
+    // --- CONTROLS (always polled so pause can be toggled while paused) ---
     S.input.steerLeft = false; S.input.steerRight = false; S.input.gas = false; S.input.brake = false; S.input.activate = false; S.input.pause = false;
 
-    S.pollTouch(S.raceStarted && !S.raceFinished);
+    S.pollTouch(S.raceStarted && !S.raceFinished, S.controlsAcknowledged);
 
     if (!S.controlsAcknowledged) {
       if (isRemapping()) {
@@ -65,6 +64,9 @@ export function startGameLoop() {
     }
     if (S._pauseCooldown > 0) S._pauseCooldown--;
     if (S.input.pause && S._pauseCooldown === 0) { S.paused = !S.paused; S._pauseCooldown = 20; }
+
+    if (orientationDiv?.style.display !== 'none') return;
+    if (S.paused) { lapDiv.textContent = 'PAUSED'; return; }
     if (S._activateCooldown > 0) S._activateCooldown--;
     if (S.input.activate && S._activateCooldown === 0) {
       if (S.raceFinished) { advanceToNextTrack(); }
@@ -288,8 +290,8 @@ export function startGameLoop() {
       const dpr = window.devicePixelRatio;
       for (let i = 0; i < S.allCars.length; i++) {
         const c = S.allCars[i];
-        const screenX = (c.x + cam.x) * dpr;
-        const screenY = (c.y + cam.y - 25) * dpr;
+        const screenX = (c.x * S.ZOOM + cam.x) * dpr;
+        const screenY = (c.y * S.ZOOM + cam.y - 25) * dpr;
         const div = labelDivs[i];
         div.style.left = (screenX / dpr - 15) + 'px';
         div.style.top = (screenY / dpr) + 'px';
@@ -302,8 +304,8 @@ export function startGameLoop() {
         }
       }
       // Speed HUD position
-      const pScreenX = (S.player.x + cam.x) * dpr;
-      const pScreenY = (S.player.y + cam.y + 20) * dpr;
+      const pScreenX = (S.player.x * S.ZOOM + cam.x) * dpr;
+      const pScreenY = (S.player.y * S.ZOOM + cam.y + 20) * dpr;
       speedHud.style.left = (pScreenX / dpr - 15) + 'px';
       speedHud.style.top = (pScreenY / dpr) + 'px';
 
@@ -334,7 +336,7 @@ export function startGameLoop() {
       if (S.player._heldPowerup) {
         powerupHud.style.display = 'block';
         powerupHud.style.color = S.player._heldPowerup === 'S' ? '#00FF88' : '#FF8800';
-        powerupHud.textContent = S.player._speedBoost ? '▶▶' : `[${S.player._heldPowerup}] Z / b:2`;
+        powerupHud.textContent = S.player._speedBoost ? '▶▶' : S.player._heldPowerup;
       } else if (S.player._speedBoost) {
         powerupHud.style.display = 'block';
         powerupHud.style.color = '#FFFFFF';

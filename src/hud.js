@@ -16,17 +16,13 @@ export let installBanner = null;
 export let _deferredInstall = null;
 
 // ------------------------------------------------------------------
-// Init
 // ------------------------------------------------------------------
-export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) {
-  S._isMobile = _isMobile;
-  S.MAP_W = _isMobile ? 130 : 220;
-  S.MINIMAP_SCALE = S.MAP_W / 4000;
-
-  // Orientation lock
+// Orientation guard — call before anything else (including splash)
+// ------------------------------------------------------------------
+export function initOrientationGuard() {
   orientationDiv = document.createElement('div');
   orientationDiv.style.cssText = `
-    position:fixed;inset:0;z-index:99999;
+    position:fixed;inset:0;z-index:999999;
     background:#050510;color:#00FFFF;
     font-family:monospace;font-size:20px;font-weight:bold;
     display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;
@@ -37,6 +33,15 @@ export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) 
   checkOrientation();
   window.addEventListener('orientationchange', checkOrientation);
   window.addEventListener('resize', checkOrientation);
+}
+
+// ------------------------------------------------------------------
+// Init
+// ------------------------------------------------------------------
+export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) {
+  S._isMobile = _isMobile;
+  S.MAP_W = _isMobile ? 130 : 220;
+  S.MINIMAP_SCALE = S.MAP_W / 4000;
 
   // Controls overlay
   controlsDiv = document.createElement('div');
@@ -151,7 +156,7 @@ export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) 
   document.body.appendChild(deltaDiv);
 
   powerupHud = document.createElement('div');
-  powerupHud.style.cssText = 'position:absolute;top:10px;right:10px;font-family:monospace;font-size:20px;font-weight:bold;z-index:1000;pointer-events:none;display:none';
+  powerupHud.style.cssText = `position:absolute;top:10px;right:10px;font-family:monospace;font-size:${_isMobile ? '13px' : '20px'};font-weight:bold;z-index:1000;pointer-events:none;display:none`;
   document.body.appendChild(powerupHud);
 
   speedHud = document.createElement('div');
@@ -216,7 +221,6 @@ export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) 
 // Orientation
 // ------------------------------------------------------------------
 export function checkOrientation() {
-  if (!S._isMobile) return;
   const portrait = window.screen.orientation
     ? window.screen.orientation.type.startsWith('portrait')
     : window.innerHeight > window.innerWidth;
