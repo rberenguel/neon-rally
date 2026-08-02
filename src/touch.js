@@ -10,8 +10,7 @@ export { initTouchControls };
 //   RD held           → steer right
 //   Gas               → auto-on during race, UNLESS (LD&&RU) || (RD&&LU) || brake
 //   LU + RU           → brake
-//   any L + any R     → activate (powerup / race advance)
-//   Race start        → requires any L + any R (prevents auto-gas from firing immediately)
+//   any L + any R     → activate (powerup / race start / advance)
 
 const SPLIT_Y = 0.50;
 
@@ -74,7 +73,7 @@ function initTouchControls(input) {
         if (bothUp) input.brake = true;
 
         const gasOff = (LD && RU) || (RD && LU) || bothUp;
-        if (!gasOff && (isRaceActive || bothDown)) input.gas = true;
+        if (!gasOff && isRaceActive) input.gas = true;
 
         if (bothDown) input.activate = true;
     };

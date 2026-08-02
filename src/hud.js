@@ -143,7 +143,7 @@ export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) 
 
   // Lap / delta / powerup / speed HUDs
   lapDiv = document.createElement('div');
-  lapDiv.style.cssText = 'position:absolute;top:10px;left:10px;color:#00FFFF;font-family:monospace;font-size:18px;z-index:1000;pointer-events:none;';
+  lapDiv.style.cssText = `position:absolute;top:10px;left:10px;color:#00FFFF;font-family:monospace;font-size:${_isMobile ? '13px' : '18px'};z-index:1000;pointer-events:none;`;
   document.body.appendChild(lapDiv);
 
   deltaDiv = document.createElement('div');
