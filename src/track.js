@@ -53,7 +53,7 @@ export function trackIdToSeed(id) {
 }
 
 
-export function generateTrack(difficulty = 0.5, attempt = 0, seedOrId = null) {
+export function generateTrack(difficulty = 0.5, attempt = 0, seedOrId = null, sizeMultiplier = 1.0, trackSamples = 1000) {
     let seed;
     if (seedOrId === null) {
         seed = Math.floor(Math.random() * 4294967296);
@@ -65,11 +65,12 @@ export function generateTrack(difficulty = 0.5, attempt = 0, seedOrId = null) {
     }
 
     const rng = createRng(seed);
-    const cx = 2000, cy = 2000;
+    const arenaHalf = 2000 * sizeMultiplier;
+    const cx = arenaHalf, cy = arenaHalf;
 
     // Polar harmonic approach: r(θ) = baseR + Σ amp_k * sin(k*θ + phase_k)
     // Never self-intersects. Visual complexity = number and size of harmonics.
-    const baseR = 920;
+    const baseR = 920 * sizeMultiplier;
 
     // Smooth: 3–4 harmonics, medium amplitude → nice and curvy
     // Technical: 5–7 harmonics, moderate amplitude → complex and curvy
@@ -101,12 +102,13 @@ export function generateTrack(difficulty = 0.5, attempt = 0, seedOrId = null) {
         }
     }
 
+    const minR = 380 * sizeMultiplier;
     const points = [];
-    for (let i = 0; i < TRACK_SAMPLES; i++) {
-        const theta = (i / TRACK_SAMPLES) * Math.PI * 2;
+    for (let i = 0; i < trackSamples; i++) {
+        const theta = (i / trackSamples) * Math.PI * 2;
         let r = baseR;
         for (const h of harmonics) r += h.amp * Math.sin(h.k * theta + h.phase);
-        r = Math.max(380, r);
+        r = Math.max(minR, r);
         points.push({ x: cx + r * Math.cos(theta), y: cy + r * Math.sin(theta) });
     }
     for (let i = 0; i < points.length; i++) points[i].t = i / points.length;

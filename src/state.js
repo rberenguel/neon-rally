@@ -48,6 +48,11 @@ export const S = {
   MAP_W: 220,
   MINIMAP_SCALE: 0.055,
 
+  // Mode
+  mode: null,
+  trackSamples: 1000,
+  aiGapFactor: 1.0,
+
   // Race state
   raceConfig: { totalLaps: 5 },
   raceStarted: false,

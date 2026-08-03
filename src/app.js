@@ -8,7 +8,7 @@ import { createPowerupLayer } from './powerups.js';
 import { initEngineSound } from './audio.js';
 import { makeControlHandler } from './controls.js';
 import { initTouchControls } from './touch.js';
-import { showTrackSelect } from './menu.js';
+import { showTrackSelect, showModeSelect } from './menu.js';
 import { S } from './state.js';
 import { rebuildTrack, warmUpAI, placeAllCars } from './trackManager.js';
 import { initHud, initOrientationGuard, dismissControls, parseHash, decodeChallenge, setupPwaBanner, controlsDiv, debugDiv } from './hud.js';
@@ -18,6 +18,15 @@ import { createRng } from './track.js';
 // --- 0. ORIENTATION GUARD + SPLASH ---
 initOrientationGuard();
 await showSplash();
+
+// --- 0b. MODE SELECT ---
+const selectedMode = await showModeSelect();
+S.mode = selectedMode;
+S.trackSamples = selectedMode.trackSamples;
+S.arena.width = selectedMode.arenaSize;
+S.arena.height = selectedMode.arenaSize;
+S.raceConfig.totalLaps = selectedMode.totalLaps;
+S.aiGapFactor = Math.pow(selectedMode.sizeMultiplier, -0.5);
 
 // --- 1. PIXI SETUP ---
 S.app = new Application();
@@ -68,7 +77,7 @@ S._isMobile = 'ontouchstart' in window || window.innerWidth < 768;
 S.ZOOM = S._isMobile ? 0.5 : 1.0;
 S.world.scale.set(S.ZOOM);
 S.MAP_W = S._isMobile ? 130 : 220;
-S.MINIMAP_SCALE = S.MAP_W / 4000;
+S.MINIMAP_SCALE = S.MAP_W / S.arena.width;
 
 S.minimap = new Container();
 S.app.stage.addChild(S.minimap);
@@ -209,7 +218,7 @@ window.showTuning = () => {
     warmUpAI();
     placeAllCars();
   });
-  gui.add(S.raceConfig, 'totalLaps', 1, 10, 1).name('Total Laps');
+  gui.add(S.raceConfig, 'totalLaps', 1, 30, 1).name('Total Laps');
 
   const trackInput = { id: '' };
   gui.add(trackInput, 'id').name('Track ID').onFinishChange(v => {

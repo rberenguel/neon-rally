@@ -1,7 +1,9 @@
-// menu.js — track selection overlay
+// menu.js — mode and track selection overlays
 
 import { generateTrack } from './track.js';
 import { makeControlHandler } from './controls.js';
+import { S } from './state.js';
+import { MODES } from './modes.js';
 
 const DIFFICULTIES = [0.2, 0.5, 0.8];
 const DIFFICULTY_LABELS = ['Smooth', 'Technical', 'Chaotic'];
@@ -57,12 +59,126 @@ function drawMinimap(canvas, points) {
     ctx.restore();
 }
 
+export function showModeSelect() {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position:fixed;top:0;left:0;width:100%;height:100%;
+            background:#00000f;z-index:6000;
+            display:flex;flex-direction:column;align-items:center;justify-content:center;
+            font-family:monospace;box-sizing:border-box;
+        `;
+
+        const title = document.createElement('h1');
+        title.textContent = 'SELECT MODE';
+        title.style.cssText = 'margin:0 0 6px 0;font-size:clamp(16px,4vw,26px);letter-spacing:4px;color:#fff;text-shadow:0 0 12px #00FFFF';
+        overlay.appendChild(title);
+
+        const sub = document.createElement('p');
+        sub.textContent = 'Choose your race format';
+        sub.style.cssText = 'margin:0 0 28px 0;font-size:11px;color:#00FFFF66;font-family:monospace';
+        overlay.appendChild(sub);
+
+        const cardsRow = document.createElement('div');
+        cardsRow.style.cssText = 'display:flex;gap:20px;flex-wrap:wrap;justify-content:center;padding:0 16px';
+        overlay.appendChild(cardsRow);
+
+        let resolved = false;
+        let inputReady = false;
+        setTimeout(() => { inputReady = true; }, 400);
+        const cards = [];
+        let selectedIdx = 0;
+
+        function setSelected(idx) {
+            selectedIdx = (idx + cards.length) % cards.length;
+            cards.forEach((c, i) => {
+                c.style.borderColor = i === selectedIdx ? '#00FFFF' : '#00FFFF33';
+                c.style.boxShadow   = i === selectedIdx ? '0 0 14px #00FFFF88' : 'none';
+            });
+        }
+
+        function pickIdx(idx) {
+            if (resolved) return;
+            resolved = true;
+            clearInterval(gpPoll);
+            document.removeEventListener('keydown', onKey);
+            document.body.removeChild(overlay);
+            resolve(MODES[idx]);
+        }
+
+        function onKey(e) {
+            if (!inputReady) return;
+            if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')    { e.preventDefault(); setSelected(selectedIdx - 1); }
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown')   { e.preventDefault(); setSelected(selectedIdx + 1); }
+            if (e.key === 'Enter' || e.key === ' ')                { e.preventDefault(); pickIdx(selectedIdx); }
+        }
+        document.addEventListener('keydown', onKey);
+
+        const menuInput = { steerLeft: false, steerRight: false, gas: false, activate: false, brake: false, pause: false };
+        const pollControls = makeControlHandler(menuInput);
+        let navCooldown = 0;
+        const gpPoll = setInterval(() => {
+            menuInput.steerLeft = menuInput.steerRight = menuInput.gas = menuInput.activate = false;
+            pollControls();
+            if (!inputReady || navCooldown > 0) { navCooldown = Math.max(0, navCooldown - 1); return; }
+            if (menuInput.steerLeft)  { setSelected(selectedIdx - 1); navCooldown = 4; }
+            if (menuInput.steerRight) { setSelected(selectedIdx + 1); navCooldown = 4; }
+            if (menuInput.gas || menuInput.activate) { pickIdx(selectedIdx); }
+        }, 80);
+
+        MODES.forEach((mode, i) => {
+            const card = document.createElement('div');
+            card.style.cssText = `
+                background:#070714;border:1px solid #00FFFF33;border-radius:8px;
+                padding:24px 20px;cursor:pointer;text-align:center;
+                width:clamp(150px,28vw,200px);
+                transition:border-color 0.15s,box-shadow 0.15s;
+            `;
+            card.addEventListener('mouseover', () => { if (selectedIdx !== i) { card.style.borderColor = '#00FFFF'; card.style.boxShadow = '0 0 14px #00FFFF33'; } });
+            card.addEventListener('mouseout',  () => { if (selectedIdx !== i) { card.style.borderColor = '#00FFFF33'; card.style.boxShadow = 'none'; } });
+            card.addEventListener('click', () => pickIdx(i));
+
+            const labelEl = document.createElement('div');
+            labelEl.textContent = mode.label;
+            labelEl.style.cssText = 'font-size:clamp(14px,3vw,18px);font-weight:bold;color:#00FFFF;letter-spacing:2px;margin-bottom:10px';
+            card.appendChild(labelEl);
+
+            const descEl = document.createElement('div');
+            descEl.textContent = mode.description;
+            descEl.style.cssText = 'font-size:11px;color:#aaa;margin-bottom:16px;line-height:1.5';
+            card.appendChild(descEl);
+
+            const statsEl = document.createElement('div');
+            statsEl.style.cssText = 'font-size:10px;color:#00FFFF66;margin-bottom:18px;line-height:1.8';
+            statsEl.innerHTML = `Map size: ×${mode.sizeMultiplier}<br>Laps: ${mode.totalLaps}`;
+            card.appendChild(statsEl);
+
+            const btn = document.createElement('button');
+            btn.textContent = 'SELECT';
+            btn.style.cssText = `
+                background:#00FFFF;color:#000;border:none;padding:6px 0;width:100%;
+                font-family:monospace;font-size:12px;cursor:pointer;border-radius:3px;
+            `;
+            btn.addEventListener('click', e => { e.stopPropagation(); pickIdx(i); });
+            card.appendChild(btn);
+
+            cards.push(card);
+            cardsRow.appendChild(card);
+        });
+
+        setSelected(0);
+        document.body.appendChild(overlay);
+    });
+}
+
 export function showTrackSelect(canEndSession, hideEl = null) {
     return new Promise(resolve => {
         const prevDisplay = hideEl ? hideEl.style.display : null;
         if (hideEl) hideEl.style.display = 'none';
+        const sm = S.mode ? S.mode.sizeMultiplier : 1.0;
+        const ts = S.mode ? S.mode.trackSamples : 1000;
         const options = DIFFICULTIES.map((diff, i) => {
-            const data = generateTrack(diff, 0, null);
+            const data = generateTrack(diff, 0, null, sm, ts);
             return { ...data, difficulty: diff, label: DIFFICULTY_LABELS[i], color: DIFFICULTY_COLORS[i] };
         });
 

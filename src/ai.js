@@ -1,6 +1,11 @@
 // ai.js — opponents, collision detection
 
 import { createCar, updateCarPhysics } from './car.js';
+import { S } from './state.js';
+
+// Player baselines — used to compress AI gap by mode's aiGapFactor.
+const PLAYER_MAX_SPEED = 8.8;
+const PLAYER_GRIP      = 0.025;
 
 export function createWaypointAI(trackCenterline, color) {
     const pt = trackCenterline[0];
@@ -8,18 +13,21 @@ export function createWaypointAI(trackCenterline, color) {
     const tangent = Math.atan2(next.y - pt.y, next.x - pt.x);
     const ai = createCar(pt.x, pt.y, tangent + Math.PI / 2, color);
     ai.aiType = 'waypoint';
-    ai.maxSpeed = 9.5 + Math.random() * 1.0;   // 9.5–10.5: slight spread
+    const gf = S.aiGapFactor ?? 1.0;
+    const rawMaxSpeed = 9.5 + Math.random() * 1.0;
+    ai.maxSpeed = PLAYER_MAX_SPEED + (rawMaxSpeed - PLAYER_MAX_SPEED) * gf;
     ai.acceleration = 0.14;
     ai.turnSpeed = 0.07;
-    ai.offTrackGrip = 2.0;    // 2x better steering on grass than player
-    ai.offTrackDecay = 0.99;  // barely loses speed on grass
-    ai.grip = 0.03 + Math.random() * 0.02;     // 0.03–0.05: low grip = more slide/skids
+    ai.offTrackGrip = 2.0;
+    ai.offTrackDecay = 0.99;
+    const rawGrip = 0.03 + Math.random() * 0.02;
+    ai.grip = PLAYER_GRIP + (rawGrip - PLAYER_GRIP) * gf;
     ai._steerInertia = 0;
     ai._lookAhead = 25 + Math.floor(Math.random() * 25); // 25–50 track points ahead
     ai._lineOffset = (Math.random() - 0.5) * 50;        // -25 to +25: inside ↔ outside line
     ai._brakeAngle = Math.PI / 2 + (Math.random() - 0.5) * 0.35; // 80°–100° brake threshold
     ai._riskFactor = 0.2 + Math.random() * 0.8;         // 0.2 = cautious, 1.0 = aggressive
-    ai._trackMemory = new Float32Array(1000);           // per-point caution: 0 = fearless, 1 = terrified
+    ai._trackMemory = new Float32Array(S.trackSamples);  // per-point caution: 0 = fearless, 1 = terrified
     ai._lastTrackIdx = 0;
     ai._smoothLook = ai._lookAhead;                    // smoothed lookahead, prevents jitter
     ai._recovering = false;                            // true while running the locked-target off-track recovery
@@ -108,7 +116,7 @@ export function updateWaypointAI(ai, dt, trackCenterline) {
     // Read learned caution over upcoming path
     let upcomingCaution = 0;
     for (let i = 0; i < Math.min(physicsLook, 50); i++) {
-        upcomingCaution = Math.max(upcomingCaution, ai._trackMemory[(nearestIdx + i) % 1000]);
+        upcomingCaution = Math.max(upcomingCaution, ai._trackMemory[(nearestIdx + i) % ai._trackMemory.length]);
     }
 
     // Caution = shorter lookahead + earlier braking; risk = later braking + longer look
@@ -175,10 +183,11 @@ export function recordOffTrackEpisode(ai, centerIdx, duration, verbose = true) {
     const mem = ai._trackMemory;
     if (!mem) return;
     const boost = Math.min(1.0, duration * 0.015); // ~67 frames off = full caution
-    const lo = Math.max(0, centerIdx - 6), hi = Math.min(1000, centerIdx + 7);
+    const n = mem.length;
+    const lo = Math.max(0, centerIdx - 6), hi = Math.min(n, centerIdx + 7);
     const oldMax = Math.max(...mem.slice(lo, hi));
     for (let i = -6; i <= 6; i++) {
-        const idx = (centerIdx + i + 1000) % 1000;
+        const idx = (centerIdx + i + n) % n;
         const falloff = 1 - Math.abs(i) / 7;
         mem[idx] = Math.min(1.0, mem[idx] + boost * falloff);
     }
@@ -200,19 +209,21 @@ export function createSplineAI(trackCenterline, color, speedProfile, isAce = fal
     const tangent = Math.atan2(next.y - pt.y, next.x - pt.x);
     const ai = createCar(pt.x, pt.y, tangent + Math.PI / 2, color);
     ai.aiType = 'spline';
-    ai.maxSpeed = 9.5 + rng() * 1.0;
+    const gf = S.aiGapFactor ?? 1.0;
+    const rawMaxSpeed = 9.5 + rng() * 1.0;
+    ai.maxSpeed = PLAYER_MAX_SPEED + (rawMaxSpeed - PLAYER_MAX_SPEED) * gf;
     ai.acceleration = 0.14;
     ai.turnSpeed = 0.07;
     ai.offTrackGrip = 2.0;
     ai.offTrackDecay = 0.99;
     if (isAce) {
-        // One car stays at the old fixed top-tier values
-        ai.grip = 0.045;
+        ai.grip = PLAYER_GRIP + (0.045 - PLAYER_GRIP) * gf;
         ai._steerSmooth = 0.12;
         ai._lookAhead = 40;
         ai._speedTolerance = 0.3;
     } else {
-        ai.grip = 0.035 + rng() * 0.015;      // 0.035–0.050
+        const rawGrip = 0.035 + rng() * 0.015;
+        ai.grip = PLAYER_GRIP + (rawGrip - PLAYER_GRIP) * gf;
         ai._steerSmooth = 0.08 + rng() * 0.08; // 0.08–0.16
         ai._lookAhead = 28 + Math.floor(rng() * 20); // 28–47
         ai._speedTolerance = 0.1 + rng() * 0.7; // 0.1–0.8
@@ -227,8 +238,11 @@ export function createSplineAI(trackCenterline, color, speedProfile, isAce = fal
 // Re-roll random params for a non-ace spline AI when track changes.
 export function rerollSplineParams(ai, rng) {
     if (ai._isAce || ai.aiType !== 'spline') return;
-    ai.maxSpeed = 9.5 + rng() * 1.0;
-    ai.grip = 0.035 + rng() * 0.015;
+    const gf = S.aiGapFactor ?? 1.0;
+    const rawMaxSpeed = 9.5 + rng() * 1.0;
+    ai.maxSpeed = PLAYER_MAX_SPEED + (rawMaxSpeed - PLAYER_MAX_SPEED) * gf;
+    const rawGrip = 0.035 + rng() * 0.015;
+    ai.grip = PLAYER_GRIP + (rawGrip - PLAYER_GRIP) * gf;
     ai._steerSmooth = 0.08 + rng() * 0.08;
     ai._lookAhead = 28 + Math.floor(rng() * 20);
     ai._speedTolerance = 0.1 + rng() * 0.7;
@@ -347,7 +361,7 @@ export function computeDraftBoost(car, allCars) {
 
         // Must be roughly straight ahead, not far to the side
         const cross = dx * forwardY - dy * forwardX;
-        if (Math.abs(cross) > 60) continue;
+        if (Math.abs(cross) > 25) continue;
 
         // Both heading roughly same direction
         let hDiff = other.rotation - car.rotation;
@@ -359,8 +373,11 @@ export function computeDraftBoost(car, allCars) {
         const otherSpeed = Math.hypot(other.vx, other.vy);
         if (otherSpeed < 8) continue;
 
+        car._draftSourceX = other.x;
+        car._draftSourceY = other.y;
         return DRAFT_BONUS;
     }
+    car._draftSourceX = null;
     return 0;
 }
 

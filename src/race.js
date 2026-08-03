@@ -10,7 +10,7 @@ export function getRaceProgress(car) {
   if (car.lap >= S.raceConfig.totalLaps) {
     return S.raceConfig.totalLaps + 1.0 - (car._finishOrder || 999) * 0.001;
   }
-  return car.lap + car._trackIdx / 1000;
+  return car.lap + car._trackIdx / S.trackSamples;
 }
 
 export function getLeader() {

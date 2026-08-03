@@ -94,7 +94,9 @@ function drawTurnArrows(gfx, pts, color) {
 }
 
 export function rebuildTrack(difficulty, seedOrId = null, updateUrl = true) {
-  const data = generateTrack(difficulty, 0, seedOrId);
+  const sm = S.mode ? S.mode.sizeMultiplier : 1.0;
+  const ts = S.mode ? S.mode.trackSamples : 1000;
+  const data = generateTrack(difficulty, 0, seedOrId, sm, ts);
   S.trackCenterline = data.points;
   S.trackRacingLine = data.racingLine;
   S.trackSpeedProfile = computeSpeedProfile(S.trackRacingLine);
@@ -164,7 +166,7 @@ export async function warmUpAI() {
       ai._speedProfile = S.trackSpeedProfile;
       ai._trackCenterline = S.trackRacingLine;
     } else {
-      ai._trackMemory = new Float32Array(1000);
+      ai._trackMemory = new Float32Array(S.trackSamples);
       ai._trackCenterline = S.trackRacingLine;
       pretrainAI(ai, S.trackRacingLine, (x, y) => isOnTrack(x, y, S.trackCenterline), S.arena);
     }

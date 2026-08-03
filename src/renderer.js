@@ -51,6 +51,21 @@ export function createCarSprite(color = 0x00FFFF, isPlayer = false) {
     }
     container.addChild(body);
 
+    if (isPlayer) {
+        // One Graphics per front tire so each rotates around its own position.
+        container._draftGlows = [-10, 10].map(tx => {
+            const g = new Graphics();
+            g.ellipse(0, 0, 3.5, 10);
+            g.fill({ color: 0xFFDD00, alpha: 0.18 });
+            g.ellipse(0, 0, 2, 6);
+            g.fill({ color: 0xFFFF88, alpha: 0.45 });
+            g.position.set(tx, -9);
+            g.alpha = 0;
+            container.addChild(g);
+            return g;
+        });
+    }
+
     container.pivot.set(0, -10);
     return container;
 }
@@ -68,6 +83,24 @@ export function updateCarSprite(sprite, car, slip, turnSign, movingForward, stee
     const MAX_WHEEL = 0.45;
     sprite._wheelAngle += (steerInput * MAX_WHEEL - sprite._wheelAngle) * 0.15;
     for (const w of sprite._frontWheels) w.rotation = sprite._wheelAngle;
+
+    if (sprite._draftGlows) {
+        const boost = car._draftBoost ?? 0;
+        const alpha = Math.min(1, boost / 1.5);
+        let tilt = 0;
+        if (boost > 0.05 && car._draftSourceX != null) {
+            const wdx = car._draftSourceX - car.x;
+            const wdy = car._draftSourceY - car.y;
+            const cr = car.rotation;
+            const localX =  wdx * Math.cos(cr) + wdy * Math.sin(cr);
+            const localY = -wdx * Math.sin(cr) + wdy * Math.cos(cr);
+            tilt = Math.atan2(localX, -localY);
+        }
+        for (const g of sprite._draftGlows) {
+            g.alpha = alpha;
+            g.rotation = tilt;
+        }
+    }
 }
 
 export function initParticles() {
@@ -157,8 +190,8 @@ export function initSkids() {
 }
 
 export function updateCamera(world, targetX, targetY, screenW, screenH) {
-    world.x = screenW / 2 - targetX;
-    world.y = screenH / 2 - targetY;
+    world.x = Math.round(screenW / 2 - targetX);
+    world.y = Math.round(screenH / 2 - targetY);
     return { x: world.x, y: world.y };
 }
 

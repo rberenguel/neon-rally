@@ -41,7 +41,7 @@ export function initOrientationGuard() {
 export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) {
   S._isMobile = _isMobile;
   S.MAP_W = _isMobile ? 130 : 220;
-  S.MINIMAP_SCALE = S.MAP_W / 4000;
+  S.MINIMAP_SCALE = S.MAP_W / S.arena.width;
 
   // Controls overlay
   controlsDiv = document.createElement('div');

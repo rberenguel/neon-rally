@@ -92,7 +92,7 @@ export function startGameLoop() {
       // --- CAUTION MEMORY DECAY ---
       for (const ai of S.aiCars) {
         if (ai._trackMemory) {
-          for (let i = 0; i < 1000; i++) ai._trackMemory[i] *= 0.998;
+          for (let i = 0; i < ai._trackMemory.length; i++) ai._trackMemory[i] *= 0.998;
         }
       }
 
@@ -159,7 +159,7 @@ export function startGameLoop() {
 
       // --- SPLIT RECORDING ---
       if (S.raceStarted && !S.raceFinished) {
-        const progress = Math.min(1, (S.player.lap + (S.player._trackIdx || 0) / 1000) / S.raceConfig.totalLaps);
+        const progress = Math.min(1, (S.player.lap + (S.player._trackIdx || 0) / S.trackSamples) / S.raceConfig.totalLaps);
         if (S._splitFrames[0] === null && progress >= 0.25) S._splitFrames[0] = S.raceFrame;
         if (S._splitFrames[1] === null && progress >= 0.50) S._splitFrames[1] = S.raceFrame;
         if (S._splitFrames[2] === null && progress >= 0.75) S._splitFrames[2] = S.raceFrame;
@@ -168,10 +168,10 @@ export function startGameLoop() {
       // --- LAPS & RACE FINISH ---
       if (S.raceStarted && S.raceFrame > 120) {
         for (const c of S.allCars) {
-          const idx = Math.floor(getTrackProgress(c.x, c.y, S.trackCenterline) * 1000);
+          const idx = Math.floor(getTrackProgress(c.x, c.y, S.trackCenterline) * S.trackSamples);
           const raw = idx - (c._trackIdx ?? idx);
-          if (raw > 0 && raw < 500) c._lapDelta = (c._lapDelta ?? 0) + raw;
-          if (c._trackIdx !== undefined && c._trackIdx > 800 && idx < 200 && c.lap < S.raceConfig.totalLaps && (c._lapDelta ?? 0) >= 800) {
+          if (raw > 0 && raw < S.trackSamples * 0.5) c._lapDelta = (c._lapDelta ?? 0) + raw;
+          if (c._trackIdx !== undefined && c._trackIdx > S.trackSamples * 0.8 && idx < S.trackSamples * 0.2 && c.lap < S.raceConfig.totalLaps && (c._lapDelta ?? 0) >= S.trackSamples * 0.8) {
             c.lap++;
             c._lapDelta = 0;
             if (c.lap >= S.raceConfig.totalLaps) c._finishOrder = ++S._finishCounter;
@@ -221,7 +221,7 @@ export function startGameLoop() {
           if (lapDiv.textContent !== text) lapDiv.textContent = text;
 
           if (S.challengeTime) {
-            const progress = Math.min(1, (S.player.lap + (S.player._trackIdx || 0) / 1000) / S.raceConfig.totalLaps);
+            const progress = Math.min(1, (S.player.lap + (S.player._trackIdx || 0) / S.trackSamples) / S.raceConfig.totalLaps);
             const delta = challengeDelta(S.raceFrame, progress, S.challengeSplits, S.challengeTime);
             const ahead = delta < 0;
             deltaDiv.style.display = 'block';
@@ -327,7 +327,7 @@ export function startGameLoop() {
           const name = c === S.player ? 'PLAYER' : getColorName(c.color);
           const on = isOnTrack(c.x, c.y, S.trackCenterline) ? 'ON' : 'OFF';
           const idx = c._trackIdx !== undefined ? c._trackIdx : '?';
-          const prog = (c.lap + (c._trackIdx || 0) / 1000).toFixed(3);
+          const prog = (c.lap + (c._trackIdx || 0) / S.trackSamples).toFixed(3);
           dbg += `${name}: lap=${c.lap} idx=${idx} prog=${prog} ${on}<br>`;
         }
         debugDiv.innerHTML = dbg;
