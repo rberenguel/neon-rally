@@ -21,7 +21,7 @@ Each column split at 50% screen height: U = upper half, D = lower half.
 | LD (primary) + RD | left | off | |
 | RD (primary) + LD | right | off | |
 | Primary released, secondary survives | secondary direction | off → 5-frame grace → on | |
-| LU + RU | — | off | brake |
+| LU + RU | — | — | (reserved) |
 | CD (touchstart) | — | — | activate (powerup / race start); lock timer |
 | CU (touchstart) | — | — | pause; lock timer |
 

@@ -1,15 +1,21 @@
 import { S } from './state.js';
-import { isOnTrack, getTrackProgress } from './track.js';
+import { isOnTrack, getTrackZone, getTrackProgress } from './track.js';
 import { updateCarPhysics } from './car.js';
 import { updateCarSprite, updateCamera, shakeOnBump, updateShake } from './renderer.js';
 import { updateWaypointAI, updateSplineAI, resolveCollisions, computeDraftBoost, recordOffTrackEpisode } from './ai.js';
 import { spawnPowerup, updatePowerups, tickBoosts, activatePowerup, resetPowerupRng } from './powerups.js';
-import { dismissControls, orientationDiv, lapDiv, deltaDiv, powerupHud, speedHud, debugDiv, labelDivs, showAnnounce, showLabels, updateMinimap, formatTime, challengeDelta, encodeChallenge, showFinishedOverlay } from './hud.js';
+import { dismissControls, orientationDiv, lapDiv, deltaDiv, powerupHud, speedHud, fuelHud, fuelBarFill, fuelFlowLabel, fuelPctLabel, pitZoneDiv, showPitMenu, dismissPitMenu, confirmPitMenu, isPitMenuOpen, pitMenuStep, pitStopFrames, debugDiv, labelDivs, showAnnounce, showLabels, updateMinimap, formatTime, challengeDelta, encodeChallenge, showFinishedOverlay } from './hud.js';
 import { getRaceProgress, getLeader, getColorName, advanceToNextTrack, endSession } from './race.js';
 import { isRemapping } from './controls.js';
 import { seedToTrackId } from './track.js';
 
 const BUMP_DIST = 16;
+
+function ordinal(n) {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return n + 'th';
+  return n + (['th','st','nd','rd'][n % 10] ?? 'th');
+}
 
 function emitCarEffects(car, state, slipThreshold, skids, particles) {
   const rearX = -state.forwardX;
@@ -42,9 +48,17 @@ export function startGameLoop() {
     const dt = ticker.deltaTime;
 
     // --- CONTROLS (always polled so pause can be toggled while paused) ---
-    S.input.steerLeft = false; S.input.steerRight = false; S.input.gas = false; S.input.brake = false; S.input.activate = false; S.input.pause = false;
+    S.input.steerLeft = false; S.input.steerRight = false; S.input.gas = false; S.input.activate = false; S.input.pause = false; S.input.fuelFlowUp = false; S.input.fuelFlowDown = false;
 
-    S.pollTouch(S.raceStarted && !S.raceFinished, S.controlsAcknowledged);
+    S.pollTouch(S.raceStarted && !S.raceFinished, true);
+    if (!S.controlsAcknowledged) {
+      S.input.steerLeft = false;
+      S.input.steerRight = false;
+      S.input.gas = false;
+      S.input.pause = false;
+      S.input.fuelFlowUp = false;
+      S.input.fuelFlowDown = false;
+    }
 
     if (!S.controlsAcknowledged) {
       if (isRemapping()) {
@@ -63,7 +77,53 @@ export function startGameLoop() {
       S.pollControls();
     }
     if (S._pauseCooldown > 0) S._pauseCooldown--;
-    if (S.input.pause && S._pauseCooldown === 0) { S.paused = !S.paused; S._pauseCooldown = 20; }
+    if (S._pitMenuStepCooldown > 0) S._pitMenuStepCooldown--;
+
+    if (isPitMenuOpen()) {
+      // Route real controls into the pit menu; nothing else runs while it's open
+      if (S.input.pause && S._pauseCooldown === 0) {
+        S._pauseCooldown = 20;
+        dismissPitMenu(); S.paused = false;
+      }
+      if (S.input.activate && S._activateCooldown === 0) {
+        S._activateCooldown = 10;
+        confirmPitMenu(); S.paused = false;
+      }
+      if (S._pitMenuStepCooldown === 0) {
+        if (S.input.steerLeft)  { pitMenuStep(-1); S._pitMenuStepCooldown = 6; }
+        if (S.input.steerRight) { pitMenuStep(+1); S._pitMenuStepCooldown = 6; }
+      }
+    } else if (S.input.pause && S._pauseCooldown === 0) {
+      S._pauseCooldown = 20;
+      const pitAvail = S.mode?.hasPit && S._inPitZone && S.raceStarted && !S.raceFinished && !S._pitActive && S._pitInvulTimer <= 0;
+      if (pitAvail) {
+        S.paused = true;
+        showPitMenu(
+          S.player.fuel ?? 1,
+          (fuelPct) => {
+            S._pitFuelToAdd = fuelPct;
+            S._pitStopTimer = pitStopFrames(fuelPct * 100);
+            S._pitActive = true;
+            S.paused = false;
+            const lapsLeft = S.raceConfig.totalLaps - S.player.lap - 1;
+            const lapsStr = lapsLeft <= 0 ? 'Final lap' : `${lapsLeft} lap${lapsLeft !== 1 ? 's' : ''} left`;
+            showAnnounce(`PIT STOP<br><span style="font-size:22px">${lapsStr}</span>`);
+          },
+          () => { S.paused = false; }
+        );
+      } else {
+        S.paused = !S.paused;
+      }
+    }
+
+    // Fuel flow cycling (GP / hasFuel modes)
+    if (S.mode?.hasFuel) {
+      if (S._fuelFlowCooldown > 0) S._fuelFlowCooldown--;
+      if (S._fuelFlowCooldown === 0) {
+        if (S.input.fuelFlowUp)   { S.player.fuelFlow = Math.min( 1, (S.player.fuelFlow ?? 0) + 1); S._fuelFlowCooldown = 6; }
+        if (S.input.fuelFlowDown) { S.player.fuelFlow = Math.max(-1, (S.player.fuelFlow ?? 0) - 1); S._fuelFlowCooldown = 6; }
+      }
+    }
 
     if (orientationDiv?.style.display !== 'none') return;
     if (S.paused) { lapDiv.textContent = 'PAUSED'; return; }
@@ -72,8 +132,7 @@ export function startGameLoop() {
       if (S.raceFinished) { advanceToNextTrack(); }
       else if (S.player._heldPowerup) { activatePowerup(S.player); S._activateCooldown = 10; }
     }
-    const gas   = S.player.invertControls ? S.input.brake : S.input.gas;
-    const brake = S.player.invertControls ? S.input.gas   : S.input.brake;
+    const gas = S.input.gas;
 
     // --- RACE START ---
     const wantsStart = S._isMobile
@@ -85,6 +144,11 @@ export function startGameLoop() {
       S._splitFrames = [null, null, null];
       resetPowerupRng(S.trackSeed ?? 0);
       showLabels();
+      for (const c of S.allCars) { c._logAccel = true; c._physicsLogFrame = 0; }
+      for (const c of S.allCars) {
+        const zone = getTrackZone(c.x, c.y, S.trackCenterline);
+        console.log(`[ZONE] ${c.isPlayer ? 'PLAYER' : 'AI'} zone=${zone} x=${c.x.toFixed(1)} y=${c.y.toFixed(1)}`);
+      }
     }
     if (S.raceStarted) S.raceFrame++;
 
@@ -107,10 +171,60 @@ export function startGameLoop() {
         }
       }
 
+      // --- PIT ZONE DETECTION ---
+      if (S.pitBox && S.raceStarted && !S.raceFinished) {
+        const dx = S.player.x - S.pitBox.x, dy = S.player.y - S.pitBox.y;
+        const along  = Math.abs(dx * S.pitBox.fwdX  + dy * S.pitBox.fwdY);
+        const across = Math.abs(dx * S.pitBox.perpX + dy * S.pitBox.perpY);
+        const wasInPitZone = S._inPitZone;
+        S._inPitZone = along < S.pitBox.halfLen && across < S.pitBox.halfWidth;
+        // Auto pit on low fuel: trigger once on pit zone entry, open menu
+        if (!wasInPitZone && S._inPitZone && S.mode?.hasFuel && !S._pitActive &&
+            S._pitInvulTimer <= 0 && S.player.fuel <= 0.2 && !isPitMenuOpen()) {
+          S.paused = true;
+          showPitMenu(
+            S.player.fuel ?? 1,
+            (fuelPct) => {
+              S._pitFuelToAdd = fuelPct;
+              S._pitStopTimer = pitStopFrames(fuelPct * 100);
+              S._pitActive = true;
+              S.paused = false;
+              const lapsLeft = S.raceConfig.totalLaps - S.player.lap - 1;
+              const lapsStr = lapsLeft <= 0 ? 'Final lap' : `${lapsLeft} lap${lapsLeft !== 1 ? 's' : ''} left`;
+              showAnnounce(`PIT STOP<br><span style="font-size:22px">${lapsStr}</span>`);
+            },
+            () => { S.paused = false; }
+          );
+          const lapsLeft = S.raceConfig.totalLaps - S.player.lap - 1;
+          const lapsStr = lapsLeft <= 0 ? 'Final lap' : `${lapsLeft} lap${lapsLeft !== 1 ? 's' : ''} left`;
+          showAnnounce(`AUTO PIT — LOW FUEL<br><span style="font-size:22px">${lapsStr}</span>`, '#FF8800');
+        }
+      } else {
+        S._inPitZone = false;
+      }
+      if (pitZoneDiv) pitZoneDiv.style.display = (S._inPitZone && !S._pitActive) ? 'block' : 'none';
+
+      // --- PIT STOP TIMER ---
+      if (S._pitActive) {
+        S.player.vx = 0; S.player.vy = 0;
+        S._pitStopTimer -= dt;
+        if (S._pitStopTimer <= 0) {
+          S.player.fuel = Math.min(1, (S.player.fuel ?? 0) + S._pitFuelToAdd);
+          S._pitActive = false;
+          S._pitFuelToAdd = 0;
+          S._pitInvulTimer = 120;
+          S.paused = true;
+          S._pauseCooldown = 20;
+          showAnnounce('GO GO GO!');
+        }
+      }
+      if (S._pitInvulTimer > 0) S._pitInvulTimer -= dt;
+
       // --- PLAYER ---
-      const steer = (S.input.steerLeft ? -1 : 0) + (S.input.steerRight ? 1 : 0);
-      const pState = updateCarPhysics(S.player, dt, steer, gas, brake,
-        (x, y) => isOnTrack(x, y, S.trackCenterline), S.arena);
+      const steer = S._pitActive ? 0 : (S.input.steerLeft ? -1 : 0) + (S.input.steerRight ? 1 : 0);
+      const playerGas = S._pitActive ? false : (S.raceStarted ? gas : 0);
+      const pState = updateCarPhysics(S.player, dt, steer, playerGas,
+        (x, y) => getTrackZone(x, y, S.trackCenterline), S.arena);
 
       // --- AI ---
       const aiStates = [];
@@ -120,8 +234,8 @@ export function startGameLoop() {
           aiInput = ai.aiType === 'spline'
             ? updateSplineAI(ai, dt, S.trackRacingLine)
             : updateWaypointAI(ai, dt, S.trackRacingLine);
-          aiState = updateCarPhysics(ai, dt, aiInput.steer, aiInput.gas, aiInput.brake,
-            (x, y) => isOnTrack(x, y, S.trackCenterline), S.arena);
+          aiState = updateCarPhysics(ai, dt, aiInput.steer, aiInput.gas,
+            (x, y) => getTrackZone(x, y, S.trackCenterline), S.arena);
 
           if (ai.aiType === 'waypoint' && aiState.speed < 1.0) {
             ai._stuckFrames = (ai._stuckFrames || 0) + 1;
@@ -148,8 +262,8 @@ export function startGameLoop() {
             }
           }
         } else if (ai.lap >= S.raceConfig.totalLaps) {
-          aiState = updateCarPhysics(ai, dt, 0, false, true,
-            (x, y) => isOnTrack(x, y, S.trackCenterline), S.arena);
+          aiState = updateCarPhysics(ai, dt, 0, false,
+            (x, y) => getTrackZone(x, y, S.trackCenterline), S.arena);
         } else {
           aiState = { speed: 0, speedFactor: 0, onTrack: true, forwardX: 0, forwardY: 1, dot: 0, cross: 0, slip: 0, turnSign: 0, movingForward: true };
         }
@@ -177,10 +291,17 @@ export function startGameLoop() {
             if (c.lap >= S.raceConfig.totalLaps) c._finishOrder = ++S._finishCounter;
             if (c === S.player && c.lap < S.raceConfig.totalLaps) {
               const remaining = S.raceConfig.totalLaps - c.lap;
-              showAnnounce(remaining === 1 ? 'Final lap!' : `${remaining} laps to go!`);
+              const pos = S.player.prevPos > 0 ? `<br><span style="font-size:24px">${ordinal(S.player.prevPos)}</span>` : '';
+              showAnnounce((remaining === 1 ? 'Final lap!' : `${remaining} laps to go!`) + pos);
             }
           }
           c._trackIdx = idx;
+        }
+
+        // Fuel warning — once per race when dropping below 20%
+        if (S.mode?.hasFuel && !S._fuelWarningShown && S.player.fuel <= 0.2 && S.player.fuel > 0) {
+          S._fuelWarningShown = true;
+          showAnnounce('⚠ LOW FUEL', '#FF8800');
         }
 
         const leaderCar = getLeader();
@@ -215,6 +336,11 @@ export function startGameLoop() {
           showFinishedOverlay(rank, timeStr, challengeStr, shareUrl, S.sessionRaces.length, advanceToNextTrack, endSession);
           lapDiv.textContent = '';
           deltaDiv.style.display = 'none';
+        } else if (S._pitActive) {
+          const secsLeft = (S._pitStopTimer / 60).toFixed(1);
+          const lapsLeft = S.raceConfig.totalLaps - S.player.lap - 1;
+          const lapsStr = lapsLeft <= 0 ? 'Final lap' : `${lapsLeft} lap${lapsLeft !== 1 ? 's' : ''} left`;
+          lapDiv.textContent = `PIT — ${secsLeft}s  |  ${lapsStr}`;
         } else {
           const trackId = S.trackSeed !== null ? seedToTrackId(S.trackSeed) : '?';
           const text = `Lap ${Math.min(S.player.lap + 1, S.raceConfig.totalLaps)}/${S.raceConfig.totalLaps}  |  ${formatTime(S.raceFrame)}  |  Leader: ${leaderName}  |  Track: ${trackId}`;
@@ -274,17 +400,21 @@ export function startGameLoop() {
       }
 
       // --- COLLISIONS ---
-      for (const ai of S.aiCars) {
-        if (Math.hypot(ai.x - S.player.x, ai.y - S.player.y) < BUMP_DIST) {
-          shakeOnBump();
-          break;
+      if (S._pitActive || S._pitInvulTimer > 0) {
+        resolveCollisions(S.aiCars); // AI-AI still collide; player is a ghost
+      } else {
+        for (const ai of S.aiCars) {
+          if (Math.hypot(ai.x - S.player.x, ai.y - S.player.y) < BUMP_DIST) {
+            shakeOnBump();
+            break;
+          }
         }
+        resolveCollisions(S.allCars);
       }
-      resolveCollisions(S.allCars);
 
       // --- CAMERA ---
       const cam = updateCamera(S.world, S.player.x * S.ZOOM, S.player.y * S.ZOOM, S.app.screen.width, S.app.screen.height);
-      updateShake(S.app.canvas, (!pState.onTrack && gas) ? 1 : 0);
+      updateShake(S.app.canvas, (!pState.onTrack && playerGas) ? 1 : 0);
 
       // Update floating labels
       const dpr = window.devicePixelRatio;
@@ -335,15 +465,34 @@ export function startGameLoop() {
       speedHud.textContent = `${pState.speed.toFixed(1)}`;
       if (S.player._heldPowerup) {
         powerupHud.style.display = 'block';
-        powerupHud.style.color = S.player._heldPowerup === 'S' ? '#00FF88' : '#FF8800';
-        powerupHud.textContent = S.player._speedBoost ? '▶▶' : S.player._heldPowerup;
+        const isS = S.player._heldPowerup === 'S';
+        powerupHud.style.color = isS ? '#00FF88' : '#FF8800';
+        const icon = isS ? 'speedometer' : 'rocket-launch';
+        powerupHud.innerHTML = `<i class="ph-light ph-${icon}"></i>`;
       } else if (S.player._speedBoost) {
         powerupHud.style.display = 'block';
         powerupHud.style.color = '#FFFFFF';
-        powerupHud.textContent = '▶▶';
+        powerupHud.innerHTML = `<i class="ph-light ph-rocket-launch"></i>`;
       } else {
         powerupHud.style.display = 'none';
       }
+
+      // Fuel HUD
+      if (S.mode?.hasFuel && fuelHud) {
+        fuelHud.style.display = 'block';
+        const fuel = S.player.fuel ?? 1;
+        const fuelColor = fuel < 0.2 ? '#FF4444' : '#00FFFF';
+        fuelBarFill.style.width = `${(fuel * 100).toFixed(1)}%`;
+        fuelBarFill.style.background = fuelColor;
+        fuelPctLabel.textContent = `${Math.ceil(fuel * 100)}%`;
+        fuelPctLabel.style.color = fuelColor + '88';
+        const flow = S.player.fuelFlow ?? 0;
+        fuelFlowLabel.textContent = flow === 1 ? 'PSH' : flow === -1 ? 'CON' : 'BAL';
+        fuelFlowLabel.style.color  = flow === 1 ? '#FF4444' : flow === -1 ? '#00FF88' : '#00FFFF';
+      } else if (fuelHud) {
+        fuelHud.style.display = 'none';
+      }
+
       updateMinimap();
     }
   });

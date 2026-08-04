@@ -199,59 +199,76 @@ const axisActive = (idx, axis, measured, triggerVal) => {
   }
 };
 
-const handleControls = (gameActions, keyMap, buttonMap, controllerIndex = null) => () => {
-  const gamepads = navigator.getGamepads();
+const handleControls = (gameActions, keyMap, buttonMap, controllerIndex = null) => {
+  // Debounce state for gamepad GAS only — prevents single-frame flicker on held buttons
+  // without making momentary inputs (activate, pause, steer) sticky in menus.
+  const btnDebounce = new Map();
+  const DEBOUNCE_FRAMES = 2;
 
-  // ALWAYS process keyboard — never gate it on gamepad presence
-  for (let key in keyMap) {
-    if (keys[key]) {
-      gameActions[keyMap[key]]();
+  function debouncedPressed(padIdx, btnIdx, rawPressed) {
+    let padMap = btnDebounce.get(padIdx);
+    if (!padMap) {
+      padMap = new Map();
+      btnDebounce.set(padIdx, padMap);
     }
+    const seen = padMap.has(btnIdx);
+    let count = padMap.get(btnIdx) ?? DEBOUNCE_FRAMES;
+    if (rawPressed) {
+      padMap.set(btnIdx, 0);
+      return true;
+    }
+    // Until the button has been pressed at least once, treat untouched as unpressed
+    if (!seen) {
+      padMap.set(btnIdx, DEBOUNCE_FRAMES);
+      return false;
+    }
+    count++;
+    padMap.set(btnIdx, count);
+    return count < DEBOUNCE_FRAMES;
   }
 
-  if (controllerIndex !== null) {
-    const controller = gamepads[controllerIndex];
-    if (controller?.buttons) {
+  return () => {
+    const gamepads = navigator.getGamepads();
+
+    // ALWAYS process keyboard — never gate it on gamepad presence
+    for (let key in keyMap) {
+      if (keys[key]) {
+        gameActions[keyMap[key]]();
+      }
+    }
+
+    function processPad(padIdx, controller) {
+      if (!controller?.buttons) return;
       for (let button in buttonMap) {
+        const action = buttonMap[button];
         if (button.startsWith("b")) {
-          if (buttonPressed(controller.buttons[button.slice(2)])) {
-            gameActions[buttonMap[button]]?.();
+          const rawPressed = buttonPressed(controller.buttons[button.slice(2)]);
+          // Only debounce the held gas button; all other inputs are momentary
+          const effectivePressed = action === 'gas'
+            ? debouncedPressed(padIdx, button.slice(2), rawPressed)
+            : rawPressed;
+          if (effectivePressed) {
+            gameActions[action]?.();
           }
         }
         if (button.startsWith("a")) {
           const parsed = button.split(",");
           const axis = parseInt(parsed[0].slice(2));
           const val = parseFloat(parsed[1].slice(2));
-          if (axisActive(controllerIndex, axis, controller.axes[axis], val)) {
-            gameActions[buttonMap[button]]?.();
+          if (axisActive(padIdx, axis, controller.axes[axis], val)) {
+            gameActions[action]?.();
           }
         }
       }
     }
-    return;
-  }
 
-  // Process all currently connected gamepads directly — never rely on the
-  // stale controllers[] array (delete doesn't shrink array length)
-  for (let i = 0; i < gamepads.length; i++) {
-    const controller = gamepads[i];
-    if (!controller) continue;
-    if (controller.buttons) {
-      for (let button in buttonMap) {
-        if (button.startsWith("b")) {
-          if (buttonPressed(controller.buttons[button.slice(2)])) {
-            gameActions[buttonMap[button]]?.();
-          }
-        }
-        if (button.startsWith("a")) {
-          const parsed = button.split(",");
-          const axis = parseInt(parsed[0].slice(2));
-          const val = parseFloat(parsed[1].slice(2));
-          if (axisActive(i, axis, controller.axes[axis], val)) {
-            gameActions[buttonMap[button]]?.();
-          }
-        }
-      }
+    if (controllerIndex !== null) {
+      processPad(controllerIndex, gamepads[controllerIndex]);
+      return;
     }
-  }
+
+    for (let i = 0; i < gamepads.length; i++) {
+      processPad(i, gamepads[i]);
+    }
+  };
 };

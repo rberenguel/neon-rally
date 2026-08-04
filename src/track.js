@@ -2,6 +2,7 @@
 
 export const TRACK_WIDTH = 260;
 export const TRACK_HALF = TRACK_WIDTH / 2;
+export const KERB_EXTRA = 50; // world-units of kerb beyond track edge
 const TRACK_SAMPLES = 1000;
 
 // Seeded PRNG (Mulberry32) — deterministic for shared track IDs
@@ -194,6 +195,18 @@ export function isOnTrack(x, y, centerline) {
         if (d < minDist) minDist = d;
     }
     return minDist <= TRACK_HALF;
+}
+
+// Returns 2 = track, 1 = kerb, 0 = off-track
+export function getTrackZone(x, y, centerline) {
+    let minDist = Infinity;
+    for (const p of centerline) {
+        const d = Math.hypot(p.x - x, p.y - y);
+        if (d < minDist) minDist = d;
+    }
+    if (minDist <= TRACK_HALF) return 2;
+    if (minDist <= TRACK_HALF + KERB_EXTRA) return 1;
+    return 0;
 }
 
 // Precompute a target-speed multiplier (0..1) for every point on the centerline,

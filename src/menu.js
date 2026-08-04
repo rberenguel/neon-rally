@@ -114,7 +114,7 @@ export function showModeSelect() {
         }
         document.addEventListener('keydown', onKey);
 
-        const menuInput = { steerLeft: false, steerRight: false, gas: false, activate: false, brake: false, pause: false };
+        const menuInput = { steerLeft: false, steerRight: false, gas: false, activate: false, pause: false };
         const pollControls = makeControlHandler(menuInput);
         let navCooldown = 0;
         const gpPoll = setInterval(() => {
@@ -238,7 +238,7 @@ export function showTrackSelect(canEndSession, hideEl = null) {
 
         // Use the game's own control handler
         let navCooldown = 0;
-        const menuInput = { steerLeft: false, steerRight: false, gas: false, activate: false, brake: false, pause: false };
+        const menuInput = { steerLeft: false, steerRight: false, gas: false, activate: false, pause: false };
         const pollControls = makeControlHandler(menuInput);
         const gpPoll = setInterval(() => {
             menuInput.steerLeft = menuInput.steerRight = menuInput.gas = menuInput.activate = false;

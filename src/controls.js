@@ -6,30 +6,33 @@ bindKeyHandlers();
 bindGamepadHandlers();
 
 const commandNames = {
-    steerLeft:  'Steer left',
-    steerRight: 'Steer right',
-    gas:        'Gas',
-    brake:      'Brake',
-    activate:   'Use powerup / Next race',
-    pause:      'Pause / Continue',
+    steerLeft:    'Steer left',
+    steerRight:   'Steer right',
+    gas:          'Gas',
+    activate:     'Use powerup / Next race',
+    pause:        'Pause / Continue',
+    fuelFlowUp:   'Fuel flow +',
+    fuelFlowDown: 'Fuel flow −',
 };
 
 const defaultKeyMap = {
     ArrowLeft:  'steerLeft',
     ArrowRight: 'steerRight',
     ArrowUp:    'gas',
-    ArrowDown:  'brake',
     KeyZ:       'activate',
     Space:      'pause',
+    KeyE:       'fuelFlowUp',
+    KeyQ:       'fuelFlowDown',
 };
 
 const defaultButtonMap = {
     'a:2,v:-1': 'steerLeft',
     'a:2,v:1':  'steerRight',
     'b:1':      'gas',
-    'b:3':      'brake',
     'b:2':      'activate',
     'b:9':      'pause',
+    'b:5':      'fuelFlowUp',
+    'b:4':      'fuelFlowDown',
 };
 
 const stored = localStorage.getItem('race_keyMap');
@@ -49,12 +52,13 @@ const rmap = (m) => {
 // Returns a function to call each frame; populates the `input` object with boolean flags.
 function makeControlHandler(input) {
     const actions = {
-        steerLeft:  () => { input.steerLeft  = true; },
-        steerRight: () => { input.steerRight = true; },
-        gas:        () => { input.gas        = true; },
-        brake:      () => { input.brake      = true; },
-        activate:   () => { input.activate   = true; },
-        pause:      () => { input.pause      = true; },
+        steerLeft:    () => { input.steerLeft    = true; },
+        steerRight:   () => { input.steerRight   = true; },
+        gas:          () => { input.gas          = true; },
+        activate:     () => { input.activate     = true; },
+        pause:        () => { input.pause        = true; },
+        fuelFlowUp:   () => { input.fuelFlowUp   = true; },
+        fuelFlowDown: () => { input.fuelFlowDown = true; },
     };
     return handleControls(actions, keyMap, buttonMap);
 }

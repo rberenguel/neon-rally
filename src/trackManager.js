@@ -1,4 +1,4 @@
-import { TRACK_WIDTH, TRACK_HALF, generateTrack, drawTrackPath, isOnTrack, computeSpeedProfile } from './track.js';
+import { TRACK_WIDTH, TRACK_HALF, KERB_EXTRA, generateTrack, drawTrackPath, isOnTrack, getTrackZone, computeSpeedProfile } from './track.js';
 import { pretrainAI } from './ai.js';
 import { clearPowerups } from './powerups.js';
 import { S } from './state.js';
@@ -93,6 +93,37 @@ function drawTurnArrows(gfx, pts, color) {
   }
 }
 
+const KERB_STRIPE_LEN = 120; // world-units per stripe (red then white)
+const KERB_WIDTH_TOTAL = TRACK_WIDTH + KERB_EXTRA * 2;
+
+function drawKerbStripes(gfx, pts) {
+  // Walk centerline, accumulate distance, draw alternating stripes
+  let dist = 0;
+  let stripePhase = 0; // 0 = red, 1 = white
+  let segStart = 0;
+
+  const flush = (end) => {
+    if (end <= segStart) return;
+    const color = stripePhase === 0 ? 0xFF2222 : 0xEEEEEE;
+    gfx.moveTo(pts[segStart].x, pts[segStart].y);
+    for (let k = segStart + 1; k <= end; k++) gfx.lineTo(pts[k].x, pts[k].y);
+    gfx.stroke({ width: KERB_WIDTH_TOTAL, color, alpha: 0.5, join: 'round', cap: 'butt' });
+  };
+
+  for (let i = 1; i < pts.length; i++) {
+    const segLen = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    dist += segLen;
+    if (dist >= KERB_STRIPE_LEN) {
+      flush(i);
+      segStart = i;
+      dist -= KERB_STRIPE_LEN;
+      stripePhase ^= 1;
+    }
+  }
+  // Close the loop
+  flush(pts.length - 1);
+}
+
 export function rebuildTrack(difficulty, seedOrId = null, updateUrl = true) {
   const sm = S.mode ? S.mode.sizeMultiplier : 1.0;
   const ts = S.mode ? S.mode.trackSamples : 1000;
@@ -107,9 +138,11 @@ export function rebuildTrack(difficulty, seedOrId = null, updateUrl = true) {
   if (S.trackIdController) S.trackIdController.updateDisplay();
   if (updateUrl) history.replaceState(null, '', '#track=' + data.trackId);
 
+  S.trackKerb.clear();
   S.trackSurf.clear();
   S.trackGlow.clear();
   S.trackLine.clear();
+  drawKerbStripes(S.trackKerb, S.trackCenterline);
   drawTrackPath(S.trackSurf, S.trackCenterline, TRACK_WIDTH, 0x001122);
   drawTrackPath(S.trackGlow, S.trackCenterline, TRACK_WIDTH + 4, S.trackColor, 0.15);
   drawTrackPath(S.trackLine, S.trackCenterline, 2, S.trackColor, 0.6);
@@ -143,6 +176,102 @@ export function rebuildTrack(difficulty, seedOrId = null, updateUrl = true) {
   S.finishLine.moveTo(S.startPt.x - S.perpX * TRACK_HALF, S.startPt.y - S.perpY * TRACK_HALF);
   S.finishLine.lineTo(S.startPt.x + S.perpX * TRACK_HALF, S.startPt.y + S.perpY * TRACK_HALF);
   S.finishLine.stroke({ width: 3, color: 0xFFFFFF, alpha: 0.7 });
+
+  // Pit zone — curved belt following the track, with gate lines at entry/exit
+  S.pitBox = null;
+  if (S.mode?.hasPit) {
+    const fwdX = Math.cos(S.tangent), fwdY = Math.sin(S.tangent);
+    const pts = S.trackCenterline;
+    const N = pts.length;
+
+    // Local perpendicular at a centerline index (left of travel direction)
+    function perpAt(idx) {
+      const a = (idx - 1 + N) % N, b = (idx + 1) % N;
+      const tx = pts[b].x - pts[a].x, ty = pts[b].y - pts[a].y;
+      const len = Math.hypot(tx, ty);
+      return len > 0.001 ? { x: -ty / len, y: tx / len } : { x: S.perpX, y: S.perpY };
+    }
+
+    // Walk backward/forward from index 0 to find entry/exit indices
+    function walkBack(dist) {
+      let d = 0, i = 0;
+      for (let s = 0; s < N; s++) {
+        const prev = (i - 1 + N) % N;
+        d += Math.hypot(pts[i].x - pts[prev].x, pts[i].y - pts[prev].y);
+        i = prev;
+        if (d >= dist) return i;
+      }
+      return i;
+    }
+    function walkForward(dist) {
+      let d = 0, i = 0;
+      for (let s = 0; s < N; s++) {
+        const next = (i + 1) % N;
+        d += Math.hypot(pts[next].x - pts[i].x, pts[next].y - pts[i].y);
+        i = next;
+        if (d >= dist) return i;
+      }
+      return i;
+    }
+
+    const entryIdx = walkBack(240);
+    const exitIdx  = walkForward(80);
+
+    // Collect indices from entry → exit wrapping through 0
+    const range = [];
+    for (let i = entryIdx, safety = 0; safety < N; safety++) {
+      range.push(i);
+      if (i === exitIdx) break;
+      i = (i + 1) % N;
+    }
+
+    if (range.length > 1) {
+      // Curved belt fill — left edge forward, right edge backward
+      const p0 = perpAt(range[0]);
+      S.finishLine.moveTo(pts[range[0]].x - p0.x * TRACK_HALF, pts[range[0]].y - p0.y * TRACK_HALF);
+      for (const idx of range) {
+        const p = perpAt(idx);
+        S.finishLine.lineTo(pts[idx].x - p.x * TRACK_HALF, pts[idx].y - p.y * TRACK_HALF);
+      }
+      for (let k = range.length - 1; k >= 0; k--) {
+        const p = perpAt(range[k]);
+        S.finishLine.lineTo(pts[range[k]].x + p.x * TRACK_HALF, pts[range[k]].y + p.y * TRACK_HALF);
+      }
+      S.finishLine.closePath();
+      S.finishLine.fill({ color: 0xFFCC44, alpha: 0.09 });
+
+      // Entry gate line
+      const ep = perpAt(range[0]);
+      S.finishLine
+        .moveTo(pts[range[0]].x - ep.x * TRACK_HALF, pts[range[0]].y - ep.y * TRACK_HALF)
+        .lineTo(pts[range[0]].x + ep.x * TRACK_HALF, pts[range[0]].y + ep.y * TRACK_HALF);
+      S.finishLine.stroke({ width: 2.5, color: 0xFFCC44, alpha: 0.6 });
+
+      // Exit gate line
+      const xp = perpAt(range[range.length - 1]);
+      S.finishLine
+        .moveTo(pts[range[range.length-1]].x - xp.x * TRACK_HALF, pts[range[range.length-1]].y - xp.y * TRACK_HALF)
+        .lineTo(pts[range[range.length-1]].x + xp.x * TRACK_HALF, pts[range[range.length-1]].y + xp.y * TRACK_HALF);
+      S.finishLine.stroke({ width: 2.5, color: 0xFFCC44, alpha: 0.6 });
+
+      // Intermediate marks — 4 evenly-spaced shorter ticks across the zone
+      const step = Math.floor(range.length / 5);
+      for (let m = 1; m <= 4; m++) {
+        const idx = range[Math.min(m * step, range.length - 1)];
+        const p = perpAt(idx);
+        const hw = TRACK_HALF * 0.55;
+        S.finishLine
+          .moveTo(pts[idx].x - p.x * hw, pts[idx].y - p.y * hw)
+          .lineTo(pts[idx].x + p.x * hw, pts[idx].y + p.y * hw);
+        S.finishLine.stroke({ width: 1.5, color: 0xFFCC44, alpha: 0.30 });
+      }
+    }
+
+    // Detection zone — rectangle approximation centred on the same region
+    const cx = S.startPt.x + S.backX * 80;
+    const cy = S.startPt.y + S.backY * 80;
+    S.pitBox = { x: cx, y: cy, fwdX, fwdY, perpX: S.perpX, perpY: S.perpY, halfLen: 160, halfWidth: TRACK_HALF };
+  }
 }
 
 export function placeOnGrid(car, index) {
@@ -168,7 +297,7 @@ export async function warmUpAI() {
     } else {
       ai._trackMemory = new Float32Array(S.trackSamples);
       ai._trackCenterline = S.trackRacingLine;
-      pretrainAI(ai, S.trackRacingLine, (x, y) => isOnTrack(x, y, S.trackCenterline), S.arena);
+      pretrainAI(ai, S.trackRacingLine, (x, y) => getTrackZone(x, y, S.trackCenterline), S.arena);
     }
   }
   placeAllCars();

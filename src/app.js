@@ -58,10 +58,12 @@ S.world.addChild(arenaGrid);
 S.skids = initSkids();
 
 // Track layers
+S.trackKerb = new Graphics();
 S.trackSurf = new Graphics();
 S.trackGlow = new Graphics();
 S.trackLine = new Graphics();
 S.debugGfx  = new Graphics();
+S.world.addChild(S.trackKerb);
 S.world.addChild(S.trackSurf);
 S.world.addChild(S.trackGlow);
 S.world.addChild(S.trackLine);
@@ -118,7 +120,7 @@ S.player = createCar(S.startPt.x, S.startPt.y, S.tangent + Math.PI / 2, 0x00FFFF
 S.player.invertControls = false;
 S.player.trackDifficulty = 0.6;
 S.player.isPlayer = true;
-S.player.maxSpeed = 8.8;
+S.player.maxSpeed = 9.2;
 S.player.acceleration = 0.14;
 S.player.grip = 0.025;
 
@@ -127,11 +129,11 @@ S.world.addChild(S.playerSprite);
 S.player.sprite = S.playerSprite;
 
 const aiDefs = [
-  { color: 0xFF00FF, name: 'Magenta', type: 'waypoint' },
-  { color: 0x00FF00, name: 'Green',   type: 'spline',   ace: true },
-  { color: 0xFF8000, name: 'Orange',  type: 'spline'   },
-  { color: 0xFFFF00, name: 'Yellow',  type: 'spline'   },
-  { color: 0x8000FF, name: 'Purple',  type: 'spline'   },
+  { color: 0xFF00FF, name: 'Magenta', type: 'spline', clonePlayer: true },
+  { color: 0x00FF00, name: 'Green',   type: 'spline', ace: true },
+  { color: 0xFF8000, name: 'Orange',  type: 'spline' },
+  { color: 0xFFFF00, name: 'Yellow',  type: 'spline' },
+  { color: 0x8000FF, name: 'Purple',  type: 'spline' },
 ];
 
 for (let i = 0; i < aiDefs.length; i++) {
@@ -147,6 +149,18 @@ for (let i = 0; i < aiDefs.length; i++) {
   ai.lap = 0;
   ai.prevPos = 0;
   ai._trackIdx = 0;
+  if (def.clonePlayer) {
+    ai._clonePlayer = true;
+    ai.maxSpeed = S.player.maxSpeed;
+    ai.acceleration = S.player.acceleration;
+    ai.grip = S.player.grip;
+    ai.turnSpeed = S.player.turnSpeed;
+    ai.offTrackGrip = S.player.offTrackGrip || 1.0;
+    ai.offTrackDecay = S.player.offTrackDecay || 0.965;
+    ai._steerSmooth = 0.06;
+    ai._lookAhead = 20;
+    ai._speedTolerance = 0.1;
+  }
   S.aiCars.push(ai);
   S.aiSprites.push(sprite);
 }

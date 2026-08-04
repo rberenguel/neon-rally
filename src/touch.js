@@ -13,7 +13,7 @@ export { initTouchControls };
 //   LD(primary)+RD   → steer left,  gas off
 //   RD(primary)+LD   → steer right, gas off
 //   primary released, secondary survives → steer secondary, gas off (GAS_GRACE frames) → on
-//   LU + RU          → brake
+//   LU + RU          → (reserved)
 //   CD (touchstart)  → activate (powerup / race start); lock timer
 //   CU (touchstart)  → pause; lock timer
 
@@ -34,10 +34,14 @@ function initTouchControls(input) {
     let gasOffGrace    = 0;
 
     // Pending one-shot actions (set in touchstart, consumed in pollTouch)
-    let pendingActivate = false;
-    let pendingPause    = false;
-    let activateLock    = 0;
-    let pauseLock       = 0;
+    let pendingActivate  = false;
+    let pendingPause     = false;
+    let pendingFuelUp    = false;
+    let pendingFuelDown  = false;
+    let activateLock     = 0;
+    let pauseLock        = 0;
+    let fuelUpLock       = 0;
+    let fuelDownLock     = 0;
 
     function getZone(x, y) {
         const xf = x / window.innerWidth;
@@ -64,8 +68,14 @@ function initTouchControls(input) {
 
     const INTERACTIVE = new Set(['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'A', 'LABEL']);
 
+    function isInteractive(elt) {
+        if (!elt || !elt.tagName) return false;
+        if (INTERACTIVE.has(elt.tagName)) return true;
+        return !!elt.closest?.('button, input, select, textarea, a, label');
+    }
+
     window.addEventListener('touchstart', e => {
-        if (!INTERACTIVE.has(e.target.tagName)) e.preventDefault();
+        if (!isInteractive(e.target)) e.preventDefault();
         for (const t of e.changedTouches) {
             const zone = getZone(t.clientX, t.clientY);
             touchZones.set(t.identifier, zone);
@@ -80,6 +90,14 @@ function initTouchControls(input) {
             if (zone === 'CU' && pauseLock === 0) {
                 pendingPause = true;
                 pauseLock    = LOCK_FRAMES;
+            }
+            if (zone === 'RU' && fuelUpLock === 0) {
+                pendingFuelUp = true;
+                fuelUpLock    = LOCK_FRAMES;
+            }
+            if (zone === 'LU' && fuelDownLock === 0) {
+                pendingFuelDown = true;
+                fuelDownLock    = LOCK_FRAMES;
             }
         }
         recompute();
@@ -129,7 +147,7 @@ function initTouchControls(input) {
     }
 
     window.addEventListener('touchend', e => {
-        if (!INTERACTIVE.has(e.target.tagName)) e.preventDefault();
+        if (!isInteractive(e.target)) e.preventDefault();
         removeTouches(e.changedTouches);
     }, { passive: false });
 
@@ -140,31 +158,33 @@ function initTouchControls(input) {
     function pollTouch(isRaceActive, isLive) {
         if (!isLive) {
             // Discard anything accumulated while menus/overlays were open
-            pendingActivate = false;
-            pendingPause    = false;
-            gasOffGrace     = 0;
+            pendingActivate  = false;
+            pendingPause     = false;
+            pendingFuelUp    = false;
+            pendingFuelDown  = false;
+            gasOffGrace      = 0;
             return;
         }
 
-        const { LU, RU } = zones;
-        const bothUp = LU && RU;
-        const pl     = primaryLower();
+        const pl = primaryLower();
 
         if (pl === 'L') input.steerLeft  = true;
         if (pl === 'R') input.steerRight = true;
 
-        if (bothUp) input.brake = true;
-
-        // Gas off when two lower fingers held, braking, or in grace window
-        const gasOff = (lowerFingers.size > 1) || bothUp || gasOffGrace > 0;
+        // Gas off when two lower fingers held or in grace window
+        const gasOff = (lowerFingers.size > 1) || gasOffGrace > 0;
         if (!gasOff && isRaceActive) input.gas = true;
 
-        if (pendingActivate) { input.activate = true; pendingActivate = false; }
-        if (pendingPause)    { input.pause    = true; pendingPause    = false; }
+        if (pendingActivate)  { input.activate     = true; pendingActivate  = false; }
+        if (pendingPause)     { input.pause        = true; pendingPause     = false; }
+        if (pendingFuelUp)    { input.fuelFlowUp   = true; pendingFuelUp    = false; }
+        if (pendingFuelDown)  { input.fuelFlowDown = true; pendingFuelDown  = false; }
 
-        if (activateLock > 0) activateLock--;
-        if (pauseLock    > 0) pauseLock--;
-        if (gasOffGrace  > 0) gasOffGrace--;
+        if (activateLock  > 0) activateLock--;
+        if (pauseLock     > 0) pauseLock--;
+        if (fuelUpLock    > 0) fuelUpLock--;
+        if (fuelDownLock  > 0) fuelDownLock--;
+        if (gasOffGrace   > 0) gasOffGrace--;
     }
 
     return pollTouch;

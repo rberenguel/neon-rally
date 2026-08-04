@@ -8,6 +8,12 @@ export let lapDiv = null;
 export let deltaDiv = null;
 export let powerupHud = null;
 export let speedHud = null;
+export let fuelHud = null;
+export let fuelBarFill = null;
+export let fuelFlowLabel = null;
+export let fuelPctLabel = null;
+export let pitZoneDiv = null;
+export let pitMenuDiv = null;
 export let finishedDiv = null;
 export let announceDiv = null;
 export let debugDiv = null;
@@ -85,8 +91,7 @@ export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) 
       touch.innerHTML = `
         <div style="color:#fff;margin-bottom:4px">Touch (landscape)</div>
         <div><span style="color:#0FF">Hold bottom left / right</span> — steer</div>
-        <div><span style="color:#0FF">Gas auto</span> — hold reverse top half to lift</div>
-        <div><span style="color:#0FF">Both top halves</span> — brake</div>
+        <div><span style="color:#0FF">Gas auto</span> — on while steering</div>
         <div><span style="color:#0FF">Both lower halves</span> — powerup · start race</div>
       `;
       mainPanel.appendChild(touch);
@@ -156,12 +161,58 @@ export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) 
   document.body.appendChild(deltaDiv);
 
   powerupHud = document.createElement('div');
-  powerupHud.style.cssText = `position:absolute;top:10px;right:10px;font-family:monospace;font-size:${_isMobile ? '13px' : '20px'};font-weight:bold;z-index:1000;pointer-events:none;display:none`;
+  powerupHud.style.cssText = _isMobile
+    ? `position:absolute;bottom:18px;left:50%;transform:translateX(-50%);font-size:32px;z-index:1000;pointer-events:none;display:none;text-align:center;`
+    : `position:absolute;top:10px;right:10px;font-size:28px;z-index:1000;pointer-events:none;display:none`;
   document.body.appendChild(powerupHud);
 
   speedHud = document.createElement('div');
   speedHud.style.cssText = 'position:absolute;color:#FF8000;font-family:monospace;font-size:11px;z-index:1000;pointer-events:none;opacity:0.7;';
   document.body.appendChild(speedHud);
+
+  // Fuel HUD (GP mode only — shown/hidden by gameLoop)
+  fuelHud = document.createElement('div');
+  fuelHud.style.cssText = _isMobile
+    ? 'position:absolute;top:34px;left:10px;z-index:1000;pointer-events:none;display:none;'
+    : 'position:absolute;top:38px;left:10px;z-index:1000;pointer-events:none;display:none;';
+  const fuelRow = document.createElement('div');
+  fuelRow.style.cssText = `display:flex;align-items:center;gap:6px;font-family:monospace;font-size:${_isMobile ? '11px' : '13px'}`;
+  fuelFlowLabel = document.createElement('span');
+  fuelFlowLabel.style.cssText = 'min-width:3ch;color:#00FFFF';
+  fuelFlowLabel.textContent = 'BAL';
+  const barTrack = document.createElement('div');
+  barTrack.style.cssText = `width:${_isMobile ? 56 : 72}px;height:5px;background:#1a1a2e;border:1px solid #00FFFF44;border-radius:3px;overflow:hidden`;
+  fuelBarFill = document.createElement('div');
+  fuelBarFill.style.cssText = 'height:100%;width:100%;background:#00FFFF;border-radius:3px';
+  barTrack.appendChild(fuelBarFill);
+  fuelPctLabel = document.createElement('span');
+  fuelPctLabel.style.cssText = 'min-width:4ch;color:#00FFFF88;text-align:right';
+  fuelPctLabel.textContent = '100%';
+  fuelRow.append(fuelFlowLabel, barTrack, fuelPctLabel);
+  fuelHud.appendChild(fuelRow);
+  document.body.appendChild(fuelHud);
+
+  // Pit zone indicator
+  pitZoneDiv = document.createElement('div');
+  pitZoneDiv.style.cssText = `
+    position:fixed;bottom:${_isMobile ? '80px' : '24px'};left:50%;transform:translateX(-50%);
+    color:#FF8800;font-family:monospace;font-size:${_isMobile ? '12px' : '14px'};font-weight:bold;
+    text-shadow:0 0 8px #FF8800;z-index:1000;pointer-events:none;display:none;
+    background:rgba(0,0,0,0.6);padding:4px 12px;border-radius:4px;border:1px solid #FF880055;
+  `;
+  pitZoneDiv.textContent = 'PIT ZONE — PAUSE TO PIT';
+  document.body.appendChild(pitZoneDiv);
+
+  // Pit stop menu (shown when pausing inside pit zone)
+  pitMenuDiv = document.createElement('div');
+  pitMenuDiv.style.cssText = `
+    position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    background:rgba(0,0,0,0.92);border:2px solid #FF8800;border-radius:8px;
+    padding:20px 24px;color:#FF8800;font-family:monospace;
+    font-size:clamp(13px,2.5vw,16px);text-align:center;z-index:6000;
+    line-height:1.8;display:none;min-width:260px;
+  `;
+  document.body.appendChild(pitMenuDiv);
 
   // Finished overlay
   finishedDiv = document.createElement('div');
@@ -177,10 +228,10 @@ export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) 
   // Announcement
   announceDiv = document.createElement('div');
   announceDiv.style.cssText = `
-    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    position:absolute;top:65%;left:50%;transform:translate(-50%,-50%);
     color:#FFFFFF;font-family:monospace;font-size:36px;font-weight:bold;
     text-shadow:0 0 10px #00FFFF;z-index:2000;pointer-events:none;
-    opacity:0;transition:opacity 0.3s;
+    opacity:0;transition:opacity 0.3s;text-align:center;
   `;
   document.body.appendChild(announceDiv);
 
@@ -289,8 +340,94 @@ export function showFinishedOverlay(rank, timeStr, challengeStr, shareUrl, sessi
   document.getElementById('finished-end').addEventListener('click', () => { finishedDiv.style.display = 'none'; onEnd(); });
 }
 
-export function showAnnounce(text) {
-  announceDiv.textContent = text;
+// Frames per 10% of fuel added during a pit stop, plus a base overhead.
+const PIT_BASE_FRAMES  = 30;   // 0.5 s minimum service time
+const PIT_FUEL_FRAMES  = 18;   // per 10 % of fuel (0.3 s each step)
+
+export function pitStopFrames(fuelPct) {
+  if (fuelPct === 0) return 0;
+  return PIT_BASE_FRAMES + Math.round((fuelPct / 10) * PIT_FUEL_FRAMES);
+}
+
+// Pit menu state — owned here, driven by gameLoop via the exported helpers below.
+let _pitFuelAdd   = 0;
+let _pitMaxAdd    = 0;
+let _pitOnConfirm = null;
+let _pitOnCancel  = null;
+
+export function isPitMenuOpen() {
+  return pitMenuDiv?.style.display !== 'none';
+}
+
+export function dismissPitMenu() {
+  if (!isPitMenuOpen()) return;
+  pitMenuDiv.style.display = 'none';
+  const cb = _pitOnCancel; _pitOnCancel = null; _pitOnConfirm = null;
+  if (cb) cb();
+}
+
+export function confirmPitMenu() {
+  if (!isPitMenuOpen()) return;
+  pitMenuDiv.style.display = 'none';
+  const cb = _pitOnConfirm; _pitOnConfirm = null; _pitOnCancel = null;
+  if (cb) cb(_pitFuelAdd / 100);
+}
+
+export function pitMenuStep(delta) {
+  if (!isPitMenuOpen()) return;
+  _pitFuelAdd = Math.max(0, Math.min(_pitMaxAdd, _pitFuelAdd + delta));
+  _renderPitMenu();
+}
+
+export function showPitMenu(currentFuel, onConfirm, onCancel) {
+  _pitMaxAdd    = Math.round((1 - currentFuel) * 100);
+  _pitFuelAdd   = _pitMaxAdd;
+  _pitOnConfirm = onConfirm;
+  _pitOnCancel  = onCancel;
+  _renderPitMenu();
+}
+
+function _renderPitMenu() {
+  const secs = (pitStopFrames(_pitFuelAdd) / 60).toFixed(1);
+  const timeStr = _pitFuelAdd === 0 ? '—' : `${secs}s`;
+
+  pitMenuDiv.innerHTML = `
+    <h2 style="margin:0 0 14px 0;color:#fff;font-size:20px;letter-spacing:2px">PIT STOP</h2>
+    <div style="margin-bottom:10px">
+      <span style="color:#aaa">Fuel to add:</span>
+      <span style="display:inline-flex;align-items:center;gap:8px;margin-left:8px">
+        <button id="pm-fuel-dn" style="${_btnStyle()}">−</button>
+        <span style="min-width:4ch;color:#fff;text-align:center">${_pitFuelAdd}%</span>
+        <button id="pm-fuel-up" style="${_btnStyle()}">+</button>
+      </span>
+    </div>
+    <div style="margin-bottom:10px;color:#555">Change tyres: <span style="color:#333">— (coming soon)</span></div>
+    <div style="margin-bottom:16px;font-size:13px;color:#aaa">
+      Stop time: <span style="color:#FF8800">${timeStr}</span>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button id="pm-go"     style="${_btnStyle('primary')}">Activate — Pit Stop</button>
+      <button id="pm-cancel" style="${_btnStyle('cancel')}">Pause — Resume</button>
+    </div>
+  `;
+  pitMenuDiv.style.display = 'block';
+
+  // Touch / mouse fallbacks — the real input goes through S.input in gameLoop
+  pitMenuDiv.querySelector('#pm-fuel-dn').addEventListener('click', () => pitMenuStep(-5));
+  pitMenuDiv.querySelector('#pm-fuel-up').addEventListener('click', () => pitMenuStep(+5));
+  pitMenuDiv.querySelector('#pm-go').addEventListener('click', confirmPitMenu);
+  pitMenuDiv.querySelector('#pm-cancel').addEventListener('click', dismissPitMenu);
+}
+
+function _btnStyle(type) {
+  if (type === 'primary') return 'background:#FF8800;color:#000;border:none;padding:8px 16px;font-family:monospace;font-size:13px;cursor:pointer;border-radius:4px';
+  if (type === 'cancel')  return 'background:transparent;color:#aaa;border:1px solid #555;padding:8px 16px;font-family:monospace;font-size:13px;cursor:pointer;border-radius:4px';
+  return 'background:#222;color:#FF8800;border:1px solid #FF880066;padding:4px 10px;font-family:monospace;font-size:13px;cursor:pointer;border-radius:4px';
+}
+
+export function showAnnounce(text, color = '#FFFFFF') {
+  announceDiv.innerHTML = text;
+  announceDiv.style.color = color;
   announceDiv.style.opacity = '1';
   setTimeout(() => { announceDiv.style.opacity = '0'; }, 2000);
 }

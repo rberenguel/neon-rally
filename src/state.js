@@ -67,6 +67,14 @@ export const S = {
   challengeLaps: null,
   challengeSplits: null,
 
+  // Pit stop
+  pitBox: null,
+  _inPitZone: false,
+  _pitActive: false,
+  _pitStopTimer: 0,
+  _pitFuelToAdd: 0,
+  _pitInvulTimer: 0,
+
   // Powerups
   _powerupSpawnTimer: 0,
   POWERUP_SPAWN_INTERVAL: 600,
@@ -75,10 +83,12 @@ export const S = {
   paused: false,
   _pauseCooldown: 0,
   _activateCooldown: 0,
+  _fuelFlowCooldown: 0,
+  _pitMenuStepCooldown: 0,
   controlsAcknowledged: false,
   _waitForGasRelease: false,
-  input: { steerLeft: false, steerRight: false, gas: false, brake: false, activate: false, pause: false },
-  _ctrlInput: { steerLeft: false, steerRight: false, gas: false, brake: false, activate: false, pause: false },
+  input: { steerLeft: false, steerRight: false, gas: false, activate: false, pause: false, fuelFlowUp: false, fuelFlowDown: false },
+  _ctrlInput: { steerLeft: false, steerRight: false, gas: false, activate: false, pause: false, fuelFlowUp: false, fuelFlowDown: false },
   pollControls: null,
   pollTouch: null,
   _ctrlPoll: null,

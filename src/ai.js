@@ -3,9 +3,9 @@
 import { createCar, updateCarPhysics } from './car.js';
 import { S } from './state.js';
 
-// Player baselines — used to compress AI gap by mode's aiGapFactor.
-const PLAYER_MAX_SPEED = 8.8;
-const PLAYER_GRIP      = 0.025;
+// Baselines — AI stats are interpolated toward these by aiGapFactor (easier = closer to baseline).
+const AI_SPEED_BASELINE = 8.8;
+const AI_GRIP_BASELINE  = 0.025;
 
 export function createWaypointAI(trackCenterline, color) {
     const pt = trackCenterline[0];
@@ -15,13 +15,14 @@ export function createWaypointAI(trackCenterline, color) {
     ai.aiType = 'waypoint';
     const gf = S.aiGapFactor ?? 1.0;
     const rawMaxSpeed = 9.5 + Math.random() * 1.0;
-    ai.maxSpeed = PLAYER_MAX_SPEED + (rawMaxSpeed - PLAYER_MAX_SPEED) * gf;
+    ai.maxSpeed = AI_SPEED_BASELINE + (rawMaxSpeed - AI_SPEED_BASELINE) * gf;
     ai.acceleration = 0.14;
+    ai.fuel = S.mode?.hasFuel ? 0.8 : 0;
     ai.turnSpeed = 0.07;
     ai.offTrackGrip = 2.0;
     ai.offTrackDecay = 0.99;
     const rawGrip = 0.03 + Math.random() * 0.02;
-    ai.grip = PLAYER_GRIP + (rawGrip - PLAYER_GRIP) * gf;
+    ai.grip = AI_GRIP_BASELINE + (rawGrip - AI_GRIP_BASELINE) * gf;
     ai._steerInertia = 0;
     ai._lookAhead = 25 + Math.floor(Math.random() * 25); // 25–50 track points ahead
     ai._lineOffset = (Math.random() - 0.5) * 50;        // -25 to +25: inside ↔ outside line
@@ -171,9 +172,8 @@ export function updateWaypointAI(ai, dt, trackCenterline) {
     // Pre-braking only when moving fast enough to need it
     const sharpCurve = curvature > Math.PI / 3 && speed > 3;
     const gas = (!backward && Math.abs(angleDiff) < Math.PI / 3 && dist > 25 && !sharpCurve && !tooFast) || stuck;
-    const brake = false;
 
-    return { steer, gas, brake, nearestIdx };
+    return { steer, gas, nearestIdx };
 }
 
 // Records one off-track episode into an AI's caution memory. Shared by the live race
@@ -211,19 +211,20 @@ export function createSplineAI(trackCenterline, color, speedProfile, isAce = fal
     ai.aiType = 'spline';
     const gf = S.aiGapFactor ?? 1.0;
     const rawMaxSpeed = 9.5 + rng() * 1.0;
-    ai.maxSpeed = PLAYER_MAX_SPEED + (rawMaxSpeed - PLAYER_MAX_SPEED) * gf;
+    ai.maxSpeed = AI_SPEED_BASELINE + (rawMaxSpeed - AI_SPEED_BASELINE) * gf;
     ai.acceleration = 0.14;
+    ai.fuel = S.mode?.hasFuel ? 0.8 : 0;
     ai.turnSpeed = 0.07;
     ai.offTrackGrip = 2.0;
     ai.offTrackDecay = 0.99;
     if (isAce) {
-        ai.grip = PLAYER_GRIP + (0.045 - PLAYER_GRIP) * gf;
+        ai.grip = AI_GRIP_BASELINE + (0.045 - AI_GRIP_BASELINE) * gf;
         ai._steerSmooth = 0.12;
         ai._lookAhead = 40;
         ai._speedTolerance = 0.3;
     } else {
         const rawGrip = 0.035 + rng() * 0.015;
-        ai.grip = PLAYER_GRIP + (rawGrip - PLAYER_GRIP) * gf;
+        ai.grip = AI_GRIP_BASELINE + (rawGrip - AI_GRIP_BASELINE) * gf;
         ai._steerSmooth = 0.08 + rng() * 0.08; // 0.08–0.16
         ai._lookAhead = 28 + Math.floor(rng() * 20); // 28–47
         ai._speedTolerance = 0.1 + rng() * 0.7; // 0.1–0.8
@@ -238,11 +239,24 @@ export function createSplineAI(trackCenterline, color, speedProfile, isAce = fal
 // Re-roll random params for a non-ace spline AI when track changes.
 export function rerollSplineParams(ai, rng) {
     if (ai._isAce || ai.aiType !== 'spline') return;
+    if (ai._clonePlayer) {
+        ai.maxSpeed = 9.2;
+        ai.acceleration = 0.14;
+        ai.fuel = S.mode?.hasFuel ? 0.8 : 0;
+        ai.grip = 0.025;
+        ai.offTrackGrip = 1.0;
+        ai.offTrackDecay = 0.965;
+        ai._steerSmooth = 0.06;
+        ai._lookAhead = 20;
+        ai._speedTolerance = 0.1;
+        return;
+    }
     const gf = S.aiGapFactor ?? 1.0;
     const rawMaxSpeed = 9.5 + rng() * 1.0;
-    ai.maxSpeed = PLAYER_MAX_SPEED + (rawMaxSpeed - PLAYER_MAX_SPEED) * gf;
+    ai.maxSpeed = AI_SPEED_BASELINE + (rawMaxSpeed - AI_SPEED_BASELINE) * gf;
+    ai.fuel = S.mode?.hasFuel ? 0.8 : 0;
     const rawGrip = 0.035 + rng() * 0.015;
-    ai.grip = PLAYER_GRIP + (rawGrip - PLAYER_GRIP) * gf;
+    ai.grip = AI_GRIP_BASELINE + (rawGrip - AI_GRIP_BASELINE) * gf;
     ai._steerSmooth = 0.08 + rng() * 0.08;
     ai._lookAhead = 28 + Math.floor(rng() * 20);
     ai._speedTolerance = 0.1 + rng() * 0.7;
@@ -292,9 +306,8 @@ export function updateSplineAI(ai, dt, trackCenterline) {
 
     const tol = ai._speedTolerance ?? 0.3;
     const gas = speed < targetSpeed - tol;
-    const brake = false;
 
-    return { steer, gas, brake, nearestIdx };
+    return { steer, gas, nearestIdx };
 }
 
 // --- PRETRAINING ---
@@ -318,7 +331,7 @@ export function pretrainAI(ai, trackCenterline, isOnTrackFn, arena, targetLaps =
     let lapsCompleted = 0, prevIdx = 0;
     for (let frame = 1; frame <= maxSteps && lapsCompleted < targetLaps; frame++) {
         const input = updateWaypointAI(ai, dt, trackCenterline);
-        const state = updateCarPhysics(ai, dt, input.steer, input.gas, input.brake, isOnTrackFn, arena);
+        const state = updateCarPhysics(ai, dt, input.steer, input.gas, isOnTrackFn, arena);
 
         // Same wrap-detection convention as the live lap counter in app.js.
         if (prevIdx > 800 && input.nearestIdx < 200) lapsCompleted++;
