@@ -30,7 +30,7 @@ S.aiGapFactor = Math.pow(selectedMode.sizeMultiplier, -0.5);
 
 // --- 1. PIXI SETUP ---
 S.app = new Application();
-await S.app.init({ resizeTo: window, backgroundColor: 0x050510, antialias: true });
+await S.app.init({ resizeTo: window, backgroundColor: 0x050510, antialias: true, resolution: window.devicePixelRatio, autoDensity: true });
 document.body.appendChild(S.app.canvas);
 initEngineSound();
 
