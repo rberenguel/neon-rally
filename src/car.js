@@ -8,6 +8,9 @@ const FUEL_BURN_RATE = 0.000009;
 // 0.18 → full tank is 18% heavier than empty; acceleration ~84%, top speed ~93%, grip ~92%.
 const FUEL_WEIGHT_FRACTION = 0.18;
 
+// Starting fuel fraction. 1.0 for normal play; reduce for testing pit stops.
+export const START_FUEL = 0.3;
+
 export function createCar(x, y, rotation, color = 0x00FFFF) {
     return {
         x, y, vx: 0, vy: 0, rotation, z: 0, vz: 0,
@@ -20,7 +23,7 @@ export function createCar(x, y, rotation, color = 0x00FFFF) {
         offTrackDecay: 0.965, // velocity decay on grass: closer to 1 = less speed loss
         color,
         sprite: null,
-        fuel: 1.0,
+        fuel: START_FUEL,
         fuelFlow: 0,  // -1 conserve · 0 balanced · 1 push
         tireWear: 0,  // 0 fresh → 1 bald (GP mode only)
     };
@@ -62,7 +65,7 @@ export function updateCarPhysics(car, dt, steer, gas, isOnTrackFn, arena) {
     const fuelFlow    = car.isPlayer ? (car.fuelFlow ?? 0) : 0;
     const accelMult   = fuelFlow === 1 ? 1.175 : fuelFlow === -1 ? 0.85 : 1.0;
     const burnMult    = fuelFlow === 1 ? 1.4   : fuelFlow === -1 ? 0.70 : 1.0;
-    const fuelDepleted = car.isPlayer && car.fuel <= 0;
+    const fuelDepleted = car.fuel <= 0;
 
     // Weight from fuel load; AI fuel is fixed at creation, player fuel burns down
     const fuelLoad   = car.fuel ?? 0;
@@ -95,15 +98,16 @@ export function updateCarPhysics(car, dt, steer, gas, isOnTrackFn, arena) {
 
         car.vx += forwardX * accel * launch * dt;
         car.vy += forwardY * accel * launch * dt;
-
-        // Distance-based fuel burn
-        if (car.isPlayer && car.fuel !== undefined) {
-            car.fuel = Math.max(0, car.fuel - FUEL_BURN_RATE * burnMult * speed * dt);
-        }
     } else if (car._physicsLogFrame !== undefined && car._physicsLogFrame < 20) {
         console.log(`[PHYSICS] ${car.isPlayer ? 'PLAYER' : 'AI'} f=${car._physicsLogFrame} dt=${dt.toFixed(2)} zone=${zone} spd0=${speed.toFixed(3)} NO_GAS fuelDepleted=${fuelDepleted}`);
         car._physicsLogFrame++;
     }
+
+    // Distance-based fuel burn — all cars, regardless of gas input (coasting still burns)
+    if (car.fuel !== undefined && !fuelDepleted) {
+        car.fuel = Math.max(0, car.fuel - FUEL_BURN_RATE * burnMult * speed * dt);
+    }
+
     // Slide Assist (momentum redirection)
     if (speed > 0.1) {
         const idealVx = forwardX * speed;

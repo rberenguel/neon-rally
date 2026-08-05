@@ -1,6 +1,6 @@
 // ai.js — opponents, collision detection
 
-import { createCar, updateCarPhysics } from './car.js';
+import { createCar, updateCarPhysics, START_FUEL } from './car.js';
 import { S } from './state.js';
 
 // Baselines — AI stats are interpolated toward these by aiGapFactor (easier = closer to baseline).
@@ -14,10 +14,10 @@ export function createWaypointAI(trackCenterline, color) {
     const ai = createCar(pt.x, pt.y, tangent + Math.PI / 2, color);
     ai.aiType = 'waypoint';
     const gf = S.aiGapFactor ?? 1.0;
-    const rawMaxSpeed = 9.2 + Math.random() * 0.8;
+    const rawMaxSpeed = 9.2 + Math.random() * 1.2;
     ai.maxSpeed = AI_SPEED_BASELINE + (rawMaxSpeed - AI_SPEED_BASELINE) * gf;
     ai.acceleration = 0.14;
-    ai.fuel = S.mode?.hasFuel ? 0.8 : 0;
+    ai.fuel = S.mode?.hasFuel ? START_FUEL : 0;
     ai.turnSpeed = 0.07;
     ai.offTrackGrip = 2.0;
     ai.offTrackDecay = 0.99;
@@ -210,10 +210,10 @@ export function createSplineAI(trackCenterline, color, speedProfile, isAce = fal
     const ai = createCar(pt.x, pt.y, tangent + Math.PI / 2, color);
     ai.aiType = 'spline';
     const gf = S.aiGapFactor ?? 1.0;
-    const rawMaxSpeed = 9.2 + rng() * 0.8;
+    const rawMaxSpeed = 9.2 + rng() * 1.2;
     ai.maxSpeed = AI_SPEED_BASELINE + (rawMaxSpeed - AI_SPEED_BASELINE) * gf;
     ai.acceleration = 0.14;
-    ai.fuel = S.mode?.hasFuel ? 0.8 : 0;
+    ai.fuel = S.mode?.hasFuel ? START_FUEL : 0;
     ai.turnSpeed = 0.07;
     ai.offTrackGrip = 2.0;
     ai.offTrackDecay = 0.99;
@@ -242,7 +242,7 @@ export function rerollSplineParams(ai, rng) {
     if (ai._clonePlayer) {
         ai.maxSpeed = 9.2;
         ai.acceleration = 0.14;
-        ai.fuel = S.mode?.hasFuel ? 0.8 : 0;
+        ai.fuel = S.mode?.hasFuel ? START_FUEL : 0;
         ai.grip = 0.025;
         ai.offTrackGrip = 1.0;
         ai.offTrackDecay = 0.965;
@@ -252,9 +252,9 @@ export function rerollSplineParams(ai, rng) {
         return;
     }
     const gf = S.aiGapFactor ?? 1.0;
-    const rawMaxSpeed = 9.2 + rng() * 0.8;
+    const rawMaxSpeed = 9.2 + rng() * 1.2;
     ai.maxSpeed = AI_SPEED_BASELINE + (rawMaxSpeed - AI_SPEED_BASELINE) * gf;
-    ai.fuel = S.mode?.hasFuel ? 0.8 : 0;
+    ai.fuel = S.mode?.hasFuel ? START_FUEL : 0;
     const rawGrip = 0.035 + rng() * 0.015;
     ai.grip = AI_GRIP_BASELINE + (rawGrip - AI_GRIP_BASELINE) * gf;
     ai._steerSmooth = 0.08 + rng() * 0.08;

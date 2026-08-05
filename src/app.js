@@ -149,6 +149,11 @@ for (let i = 0; i < aiDefs.length; i++) {
   ai.lap = 0;
   ai.prevPos = 0;
   ai._trackIdx = 0;
+  ai._inPitZone = false;
+  ai._pitActive = false;
+  ai._pitStopTimer = 0;
+  ai._pitInvulTimer = 0;
+  ai._pitZoneFrames = 0;
   if (def.clonePlayer) {
     ai._clonePlayer = true;
     ai.maxSpeed = S.player.maxSpeed;

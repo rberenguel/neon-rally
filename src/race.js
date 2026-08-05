@@ -5,6 +5,7 @@ import { showTrackSelect } from './menu.js';
 import { showSessionSummary } from './session.js';
 import { createRng } from './track.js';
 import { rerollSplineParams } from './ai.js';
+import { START_FUEL } from './car.js';
 
 export function getRaceProgress(car) {
   if (car.lap >= S.raceConfig.totalLaps) {
@@ -39,6 +40,9 @@ export function resetCarsForNewRace() {
     S.aiCars[i].vx = 0; S.aiCars[i].vy = 0; S.aiCars[i]._steerInertia = 0;
     S.aiCars[i]._lapDelta = 0; S.aiCars[i]._draftBoost = 0;
     S.aiCars[i]._offTrackSince = 0; S.aiCars[i]._finishOrder = 0; S.aiCars[i]._stuckFrames = 0;
+    S.aiCars[i]._inPitZone = false; S.aiCars[i]._pitActive = false;
+    S.aiCars[i]._pitStopTimer = 0; S.aiCars[i]._pitInvulTimer = 0;
+    S.aiCars[i]._pitZoneFrames = 0;
     if (S.aiCars[i]._trackMemory) S.aiCars[i].aiType = 'waypoint';
     const aiRng = createRng(S.trackSeed + i);
     rerollSplineParams(S.aiCars[i], aiRng);
@@ -47,9 +51,10 @@ export function resetCarsForNewRace() {
   S.player.lap = 0; S.player.prevPos = 0; S.player._trackIdx = 0;
   S.player.vx = 0; S.player.vy = 0;
   S.player._lapDelta = 0; S.player._finishOrder = 0;
-  S.player.fuel = 1.0; S.player.fuelFlow = 0; S._fuelWarningShown = false;
+  S.player.fuel = START_FUEL; S.player.fuelFlow = 0; S._fuelWarningShown = false;
   S.player.tireWear = 0;
   S.player._physicsLogFrame = undefined; S.player._logAccel = false;
+  S._pitZoneFrames = 0;
   for (const ai of S.aiCars) { ai._physicsLogFrame = undefined; ai._logAccel = false; }
   S._inPitZone = false; S._pitActive = false; S._pitStopTimer = 0; S._pitFuelToAdd = 0; S._pitInvulTimer = 0;
   S._finishCounter = 0;

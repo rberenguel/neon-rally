@@ -180,11 +180,14 @@ export function startGameLoop() {
         const dx = S.player.x - S.pitBox.x, dy = S.player.y - S.pitBox.y;
         const along  = Math.abs(dx * S.pitBox.fwdX  + dy * S.pitBox.fwdY);
         const across = Math.abs(dx * S.pitBox.perpX + dy * S.pitBox.perpY);
-        const wasInPitZone = S._inPitZone;
         S._inPitZone = along < S.pitBox.halfLen && across < S.pitBox.halfWidth;
-        // Auto pit on low fuel: trigger once on pit zone entry, open menu
-        if (!wasInPitZone && S._inPitZone && S.mode?.hasFuel && !S._pitActive &&
-            S._pitInvulTimer <= 0 && S.player.fuel <= 0.2 && !isPitMenuOpen()) {
+        if (S._inPitZone) S._pitZoneFrames = (S._pitZoneFrames || 0) + 1;
+        else { S._pitZoneFrames = 0; S._pitAutoTriggered = false; }
+        // Auto pit on low fuel: trigger after 3 consecutive frames in zone (not on border)
+        if (S._inPitZone && !S._pitAutoTriggered && S.mode?.hasFuel && !S._pitActive &&
+            S._pitInvulTimer <= 0 && S.player.fuel <= 0.2 && !isPitMenuOpen() &&
+            (S._pitZoneFrames || 0) >= 3) {
+          S._pitAutoTriggered = true;
           S.paused = true;
           showPitMenu(
             S.player.fuel ?? 1,
@@ -236,8 +239,38 @@ export function startGameLoop() {
       // --- AI ---
       const aiStates = [];
       for (const ai of S.aiCars) {
+        // AI pit zone detection and auto-pit (freeze on entry, no navigation needed)
+        if (S.pitBox && S.raceStarted && !S.raceFinished && S.mode?.hasFuel) {
+          const adx = ai.x - S.pitBox.x, ady = ai.y - S.pitBox.y;
+          const aAlong  = Math.abs(adx * S.pitBox.fwdX  + ady * S.pitBox.fwdY);
+          const aAcross = Math.abs(adx * S.pitBox.perpX + ady * S.pitBox.perpY);
+          ai._inPitZone = aAlong < S.pitBox.halfLen && aAcross < S.pitBox.halfWidth;
+          if (ai._inPitZone) ai._pitZoneFrames = (ai._pitZoneFrames || 0) + 1;
+          else { ai._pitZoneFrames = 0; ai._pitAutoTriggered = false; }
+          if (ai._inPitZone && !ai._pitAutoTriggered && !ai._pitActive && (ai._pitInvulTimer || 0) <= 0 && ai.fuel <= 0.2 &&
+              (ai._pitZoneFrames || 0) >= 3) {
+            ai._pitAutoTriggered = true;
+            ai._pitActive = true;
+            ai._pitStopTimer = pitStopFrames(100, false);
+            console.log(`[AI PIT] ${getColorName(ai.color)} fuel=${(ai.fuel*100).toFixed(0)}%`);
+            if (Math.hypot(ai.x - S.player.x, ai.y - S.player.y) < 500) {
+              showAnnounce(`${getColorName(ai.color)} PIT`, '#FF8800');
+            }
+          }
+        }
+        if (ai._pitActive) {
+          ai.vx = 0; ai.vy = 0;
+          ai._pitStopTimer -= dt;
+          if (ai._pitStopTimer <= 0) {
+            ai.fuel = 1.0;
+            ai._pitActive = false;
+            ai._pitInvulTimer = 120;
+          }
+        }
+        if (ai._pitInvulTimer > 0) ai._pitInvulTimer -= dt;
+
         let aiInput, aiState;
-        if (S.raceStarted && ai.lap < S.raceConfig.totalLaps) {
+        if (S.raceStarted && ai.lap < S.raceConfig.totalLaps && !ai._pitActive) {
           aiInput = ai.aiType === 'spline'
             ? updateSplineAI(ai, dt, S.trackRacingLine)
             : updateWaypointAI(ai, dt, S.trackRacingLine);
@@ -268,6 +301,8 @@ export function startGameLoop() {
               ai._recovering = false;
             }
           }
+        } else if (ai._pitActive) {
+          aiState = { speed: 0, speedFactor: 0, onTrack: true, forwardX: 0, forwardY: 1, dot: 0, cross: 0, slip: 0, turnSign: 0, movingForward: true };
         } else if (ai.lap >= S.raceConfig.totalLaps) {
           aiState = updateCarPhysics(ai, dt, 0, false,
             (x, y) => getTrackZone(x, y, S.trackCenterline), S.arena);
@@ -275,6 +310,7 @@ export function startGameLoop() {
           aiState = { speed: 0, speedFactor: 0, onTrack: true, forwardX: 0, forwardY: 1, dot: 0, cross: 0, slip: 0, turnSign: 0, movingForward: true };
         }
         aiStates.push(aiState);
+        ai.sprite.alpha = (ai._pitActive || ai._pitInvulTimer > 0) ? 0.3 : 1.0;
         updateCarSprite(ai.sprite, ai, aiState.slip, aiState.turnSign, aiState.movingForward, aiState.steerInput);
       }
 
@@ -407,17 +443,23 @@ export function startGameLoop() {
       }
 
       // --- COLLISIONS ---
-      if (S._pitActive || S._pitInvulTimer > 0) {
-        resolveCollisions(S.aiCars); // AI-AI still collide; player is a ghost
-      } else {
-        for (const ai of S.aiCars) {
+      // Only active (non-pitting, non-invulnerable) cars participate
+      const activeCars = S.allCars.filter(c => {
+        const pitting = c.isPlayer ? S._pitActive : c._pitActive;
+        const invul   = c.isPlayer ? S._pitInvulTimer : (c._pitInvulTimer || 0);
+        return !pitting && invul <= 0;
+      });
+      // Bump shake only when player is also active (not pitting/ghost)
+      if (!S._pitActive && S._pitInvulTimer <= 0) {
+        const activeAI = activeCars.filter(c => c !== S.player);
+        for (const ai of activeAI) {
           if (Math.hypot(ai.x - S.player.x, ai.y - S.player.y) < BUMP_DIST) {
             shakeOnBump();
             break;
           }
         }
-        resolveCollisions(S.allCars);
       }
+      resolveCollisions(activeCars);
 
       // --- CAMERA ---
       const cam = updateCamera(S.world, S.player.x * S.ZOOM, S.player.y * S.ZOOM, S.app.screen.width, S.app.screen.height);
@@ -447,6 +489,7 @@ export function startGameLoop() {
       speedHud.style.top = (pScreenY / dpr) + 'px';
 
       // --- SPRITES ---
+      S.playerSprite.alpha = (S._pitActive || S._pitInvulTimer > 0) ? 0.3 : 1.0;
       updateCarSprite(S.playerSprite, S.player, pState.slip, pState.turnSign, pState.movingForward, pState.steerInput);
 
       // --- SKIDS & PARTICLES ---
@@ -466,7 +509,9 @@ export function startGameLoop() {
           const idx = c._trackIdx !== undefined ? c._trackIdx : '?';
           const prog = (c.lap + (c._trackIdx || 0) / S.trackSamples).toFixed(3);
           const tire = c.isPlayer ? ` grip=${Math.round(Math.max(0,(1-(c.tireWear||0)*0.8))*100)}%` : '';
-          dbg += `${name}: lap=${c.lap} idx=${idx} prog=${prog} ${on}${tire}<br>`;
+          const fuel = c.fuel !== undefined ? ` F=${Math.round(c.fuel*100)}%` : '';
+          const pit = c._pitActive ? ' PIT' : '';
+          dbg += `${name}: lap=${c.lap} idx=${idx} prog=${prog} ${on}${tire}${fuel}${pit}<br>`;
         }
         debugDiv.innerHTML = dbg;
       }
