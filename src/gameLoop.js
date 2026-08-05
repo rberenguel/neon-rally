@@ -50,7 +50,7 @@ export function startGameLoop() {
     // --- CONTROLS (always polled so pause can be toggled while paused) ---
     S.input.steerLeft = false; S.input.steerRight = false; S.input.gas = false; S.input.activate = false; S.input.pause = false; S.input.fuelFlowUp = false; S.input.fuelFlowDown = false;
 
-    S.pollTouch(S.raceStarted && !S.raceFinished, true);
+    S.pollTouch(S.raceStarted && !S.raceFinished, true, isPitMenuOpen());
     if (!S.controlsAcknowledged) {
       S.input.steerLeft = false;
       S.input.steerRight = false;

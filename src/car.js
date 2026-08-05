@@ -1,8 +1,8 @@
 // car.js — shared car physics for player and AI
 
 // Fuel burn per world-unit of distance traveled (balanced mode baseline).
-// Lower = longer stints. At ~15 000 world-units/lap this gives ~5 laps per tank.
-const FUEL_BURN_RATE = 0.000013;
+// Lower = longer stints. At ~15 000 world-units/lap this gives ~7 laps per tank.
+const FUEL_BURN_RATE = 0.000009;
 
 // Fraction of car weight that fuel represents at a full tank.
 // 0.18 → full tank is 18% heavier than empty; acceleration ~84%, top speed ~93%, grip ~92%.

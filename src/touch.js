@@ -155,7 +155,7 @@ function initTouchControls(input) {
 
     window.addEventListener('contextmenu', e => e.preventDefault());
 
-    function pollTouch(isRaceActive, isLive) {
+    function pollTouch(isRaceActive, isLive, pitMenuOpen) {
         if (!isLive) {
             // Discard anything accumulated while menus/overlays were open
             pendingActivate  = false;
@@ -175,8 +175,14 @@ function initTouchControls(input) {
         const gasOff = (lowerFingers.size > 1) || gasOffGrace > 0;
         if (!gasOff && isRaceActive) input.gas = true;
 
-        if (pendingActivate)  { input.activate     = true; pendingActivate  = false; }
-        if (pendingPause)     { input.pause        = true; pendingPause     = false; }
+        if (pitMenuOpen) {
+            // Suppress pause/activate zones during pit menu — rely on HTML buttons
+            pendingActivate = false;
+            pendingPause    = false;
+        } else {
+            if (pendingActivate)  { input.activate     = true; pendingActivate  = false; }
+            if (pendingPause)     { input.pause        = true; pendingPause     = false; }
+        }
         if (pendingFuelUp)    { input.fuelFlowUp   = true; pendingFuelUp    = false; }
         if (pendingFuelDown)  { input.fuelFlowDown = true; pendingFuelDown  = false; }
 

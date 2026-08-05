@@ -14,7 +14,7 @@ export function createWaypointAI(trackCenterline, color) {
     const ai = createCar(pt.x, pt.y, tangent + Math.PI / 2, color);
     ai.aiType = 'waypoint';
     const gf = S.aiGapFactor ?? 1.0;
-    const rawMaxSpeed = 9.5 + Math.random() * 1.0;
+    const rawMaxSpeed = 9.0 + Math.random() * 0.8;
     ai.maxSpeed = AI_SPEED_BASELINE + (rawMaxSpeed - AI_SPEED_BASELINE) * gf;
     ai.acceleration = 0.14;
     ai.fuel = S.mode?.hasFuel ? 0.8 : 0;
@@ -210,7 +210,7 @@ export function createSplineAI(trackCenterline, color, speedProfile, isAce = fal
     const ai = createCar(pt.x, pt.y, tangent + Math.PI / 2, color);
     ai.aiType = 'spline';
     const gf = S.aiGapFactor ?? 1.0;
-    const rawMaxSpeed = 9.5 + rng() * 1.0;
+    const rawMaxSpeed = 9.0 + rng() * 0.8;
     ai.maxSpeed = AI_SPEED_BASELINE + (rawMaxSpeed - AI_SPEED_BASELINE) * gf;
     ai.acceleration = 0.14;
     ai.fuel = S.mode?.hasFuel ? 0.8 : 0;
@@ -252,7 +252,7 @@ export function rerollSplineParams(ai, rng) {
         return;
     }
     const gf = S.aiGapFactor ?? 1.0;
-    const rawMaxSpeed = 9.5 + rng() * 1.0;
+    const rawMaxSpeed = 9.0 + rng() * 0.8;
     ai.maxSpeed = AI_SPEED_BASELINE + (rawMaxSpeed - AI_SPEED_BASELINE) * gf;
     ai.fuel = S.mode?.hasFuel ? 0.8 : 0;
     const rawGrip = 0.035 + rng() * 0.015;
