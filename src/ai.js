@@ -4,7 +4,7 @@ import { createCar, updateCarPhysics } from './car.js';
 import { S } from './state.js';
 
 // Baselines — AI stats are interpolated toward these by aiGapFactor (easier = closer to baseline).
-const AI_SPEED_BASELINE = 8.8;
+const AI_SPEED_BASELINE = 9.0;
 const AI_GRIP_BASELINE  = 0.025;
 
 export function createWaypointAI(trackCenterline, color) {
@@ -14,7 +14,7 @@ export function createWaypointAI(trackCenterline, color) {
     const ai = createCar(pt.x, pt.y, tangent + Math.PI / 2, color);
     ai.aiType = 'waypoint';
     const gf = S.aiGapFactor ?? 1.0;
-    const rawMaxSpeed = 9.0 + Math.random() * 0.8;
+    const rawMaxSpeed = 9.2 + Math.random() * 0.8;
     ai.maxSpeed = AI_SPEED_BASELINE + (rawMaxSpeed - AI_SPEED_BASELINE) * gf;
     ai.acceleration = 0.14;
     ai.fuel = S.mode?.hasFuel ? 0.8 : 0;
@@ -210,7 +210,7 @@ export function createSplineAI(trackCenterline, color, speedProfile, isAce = fal
     const ai = createCar(pt.x, pt.y, tangent + Math.PI / 2, color);
     ai.aiType = 'spline';
     const gf = S.aiGapFactor ?? 1.0;
-    const rawMaxSpeed = 9.0 + rng() * 0.8;
+    const rawMaxSpeed = 9.2 + rng() * 0.8;
     ai.maxSpeed = AI_SPEED_BASELINE + (rawMaxSpeed - AI_SPEED_BASELINE) * gf;
     ai.acceleration = 0.14;
     ai.fuel = S.mode?.hasFuel ? 0.8 : 0;
@@ -252,7 +252,7 @@ export function rerollSplineParams(ai, rng) {
         return;
     }
     const gf = S.aiGapFactor ?? 1.0;
-    const rawMaxSpeed = 9.0 + rng() * 0.8;
+    const rawMaxSpeed = 9.2 + rng() * 0.8;
     ai.maxSpeed = AI_SPEED_BASELINE + (rawMaxSpeed - AI_SPEED_BASELINE) * gf;
     ai.fuel = S.mode?.hasFuel ? 0.8 : 0;
     const rawGrip = 0.035 + rng() * 0.015;
@@ -394,31 +394,69 @@ export function computeDraftBoost(car, allCars) {
     return 0;
 }
 
+// OBB collision dimensions — physics position (car.x,y) is the sprite's local origin,
+// which sits roughly at the cockpit / center of mass. The body extends ~15 units forward
+// and ~18 units back from that point, and ~11 units to each side.
+const COL_HALF_W = 11;
+const COL_HALF_L = 17;
+
+function _getOBB(car) {
+    const fx = Math.cos(car.rotation - Math.PI / 2);
+    const fy = Math.sin(car.rotation - Math.PI / 2);
+    const rx = Math.cos(car.rotation);
+    const ry = Math.sin(car.rotation);
+    return { cx: car.x, cy: car.y, fx, fy, rx, ry };
+}
+
+function _obbOverlap(a, b, nx, ny, out) {
+    const dx = b.cx - a.cx;
+    const dy = b.cy - a.cy;
+    const d = Math.abs(dx * nx + dy * ny);
+    const ra = COL_HALF_L * Math.abs(a.fx * nx + a.fy * ny) + COL_HALF_W * Math.abs(a.rx * nx + a.ry * ny);
+    const rb = COL_HALF_L * Math.abs(b.fx * nx + b.fy * ny) + COL_HALF_W * Math.abs(b.rx * nx + b.ry * ny);
+    const overlap = ra + rb - d;
+    if (overlap <= 0) return false;
+    if (overlap < out.minOverlap) {
+        out.minOverlap = overlap;
+        const proj = dx * nx + dy * ny;
+        out.nx = proj >= 0 ? nx : -nx;
+        out.ny = proj >= 0 ? ny : -ny;
+    }
+    return true;
+}
+
 export function resolveCollisions(cars) {
-    const radius = 8;
     for (let i = 0; i < cars.length; i++) {
         for (let j = i + 1; j < cars.length; j++) {
             const a = cars[i], b = cars[j];
-            const dx = b.x - a.x;
-            const dy = b.y - a.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist < radius * 2 && dist > 0.001) {
-                const nx = dx / dist;
-                const ny = dy / dist;
-                const dvx = a.vx - b.vx;
-                const dvy = a.vy - b.vy;
-                const dot = dvx * nx + dvy * ny;
-                if (dot > 0) {
-                    a.vx -= dot * nx;
-                    a.vy -= dot * ny;
-                    b.vx += dot * nx;
-                    b.vy += dot * ny;
-                }
-                const overlap = (radius * 2 - dist) * 0.5;
-                a.x -= nx * overlap;
-                a.y -= ny * overlap;
-                b.x += nx * overlap;
-                b.y += ny * overlap;
+            const obbA = _getOBB(a);
+            const obbB = _getOBB(b);
+
+            let best = { minOverlap: Infinity, nx: 0, ny: 0 };
+            if (!_obbOverlap(obbA, obbB, obbA.fx, obbA.fy, best)) continue;
+            if (!_obbOverlap(obbA, obbB, obbA.rx, obbA.ry, best)) continue;
+            if (!_obbOverlap(obbA, obbB, obbB.fx, obbB.fy, best)) continue;
+            if (!_obbOverlap(obbA, obbB, obbB.rx, obbB.ry, best)) continue;
+
+            const nlen = Math.hypot(best.nx, best.ny);
+            if (nlen < 0.001) continue;
+            const nx = best.nx / nlen;
+            const ny = best.ny / nlen;
+
+            const push = best.minOverlap * 0.5;
+            a.x -= nx * push;
+            a.y -= ny * push;
+            b.x += nx * push;
+            b.y += ny * push;
+
+            const dvx = a.vx - b.vx;
+            const dvy = a.vy - b.vy;
+            const dot = dvx * nx + dvy * ny;
+            if (dot > 0) {
+                a.vx -= dot * nx;
+                a.vy -= dot * ny;
+                b.vx += dot * nx;
+                b.vy += dot * ny;
             }
         }
     }

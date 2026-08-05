@@ -1,4 +1,4 @@
-const CACHE = 'neon-rally-v0.10.4';
+const CACHE = 'neon-rally-v0.10.12';
 const PRECACHE = [
   './',
   './index.html',

@@ -12,6 +12,8 @@ export let fuelHud = null;
 export let fuelBarFill = null;
 export let fuelFlowLabel = null;
 export let fuelPctLabel = null;
+export let tireWearLabel = null;
+export let powerupIndicators = null;
 export let pitZoneDiv = null;
 export let pitMenuDiv = null;
 export let finishedDiv = null;
@@ -153,7 +155,7 @@ export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) 
 
   // Lap / delta / powerup / speed HUDs
   lapDiv = document.createElement('div');
-  lapDiv.style.cssText = `position:absolute;top:10px;left:10px;color:#00FFFF;font-family:monospace;font-size:${_isMobile ? '13px' : '18px'};z-index:1000;pointer-events:none;`;
+  lapDiv.style.cssText = `position:absolute;top:10px;left:10px;color:#00FFFF;font-family:monospace;font-size:${_isMobile ? '11px' : '18px'};z-index:1000;pointer-events:none;`;
   document.body.appendChild(lapDiv);
 
   deltaDiv = document.createElement('div');
@@ -173,8 +175,8 @@ export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) 
   // Fuel HUD (GP mode only — shown/hidden by gameLoop)
   fuelHud = document.createElement('div');
   fuelHud.style.cssText = _isMobile
-    ? 'position:absolute;top:34px;left:10px;z-index:1000;pointer-events:none;display:none;'
-    : 'position:absolute;top:38px;left:10px;z-index:1000;pointer-events:none;display:none;';
+    ? 'position:absolute;top:54px;left:10px;z-index:1000;pointer-events:none;display:none;'
+    : 'position:absolute;top:58px;left:10px;z-index:1000;pointer-events:none;display:none;';
   const fuelRow = document.createElement('div');
   fuelRow.style.cssText = `display:flex;align-items:center;gap:6px;font-family:monospace;font-size:${_isMobile ? '11px' : '13px'}`;
   fuelFlowLabel = document.createElement('span');
@@ -190,7 +192,21 @@ export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) 
   fuelPctLabel.textContent = '100%';
   fuelRow.append(fuelFlowLabel, barTrack, fuelPctLabel);
   fuelHud.appendChild(fuelRow);
+
+  const tireRow = document.createElement('div');
+  tireRow.style.cssText = `display:flex;align-items:center;gap:6px;font-family:monospace;font-size:${_isMobile ? '11px' : '13px'};margin-top:2px`;
+  tireWearLabel = document.createElement('span');
+  tireWearLabel.style.cssText = 'min-width:8ch;text-align:left';
+  tireWearLabel.textContent = 'TIRES 0%';
+  tireRow.appendChild(tireWearLabel);
+  fuelHud.appendChild(tireRow);
+
   document.body.appendChild(fuelHud);
+
+  // Powerup proximity indicators (screen-edge dots)
+  powerupIndicators = document.createElement('div');
+  powerupIndicators.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:900;overflow:hidden;';
+  document.body.appendChild(powerupIndicators);
 
   // Pit zone indicator
   pitZoneDiv = document.createElement('div');
@@ -343,17 +359,22 @@ export function showFinishedOverlay(rank, timeStr, challengeStr, shareUrl, sessi
 // Frames per 10% of fuel added during a pit stop, plus a base overhead.
 const PIT_BASE_FRAMES  = 30;   // 0.5 s minimum service time
 const PIT_FUEL_FRAMES  = 18;   // per 10 % of fuel (0.3 s each step)
+const PIT_TIRE_FRAMES  = 60;   // ~1.0 s to change tyres
 
-export function pitStopFrames(fuelPct) {
-  if (fuelPct === 0) return 0;
-  return PIT_BASE_FRAMES + Math.round((fuelPct / 10) * PIT_FUEL_FRAMES);
+export function pitStopFrames(fuelPct, changeTires = false) {
+  if (fuelPct === 0 && !changeTires) return 0;
+  let frames = PIT_BASE_FRAMES;
+  if (fuelPct > 0) frames += Math.round((fuelPct / 10) * PIT_FUEL_FRAMES);
+  if (changeTires) frames += PIT_TIRE_FRAMES;
+  return frames;
 }
 
 // Pit menu state — owned here, driven by gameLoop via the exported helpers below.
-let _pitFuelAdd   = 0;
-let _pitMaxAdd    = 0;
-let _pitOnConfirm = null;
-let _pitOnCancel  = null;
+let _pitFuelAdd    = 0;
+let _pitMaxAdd     = 0;
+let _pitChangeTires = false;
+let _pitOnConfirm  = null;
+let _pitOnCancel   = null;
 
 export function isPitMenuOpen() {
   return pitMenuDiv?.style.display !== 'none';
@@ -370,7 +391,7 @@ export function confirmPitMenu() {
   if (!isPitMenuOpen()) return;
   pitMenuDiv.style.display = 'none';
   const cb = _pitOnConfirm; _pitOnConfirm = null; _pitOnCancel = null;
-  if (cb) cb(_pitFuelAdd / 100);
+  if (cb) cb(_pitFuelAdd / 100, _pitChangeTires);
 }
 
 export function pitMenuStep(delta) {
@@ -379,17 +400,24 @@ export function pitMenuStep(delta) {
   _renderPitMenu();
 }
 
-export function showPitMenu(currentFuel, onConfirm, onCancel) {
-  _pitMaxAdd    = Math.round((1 - currentFuel) * 100);
-  _pitFuelAdd   = _pitMaxAdd;
-  _pitOnConfirm = onConfirm;
-  _pitOnCancel  = onCancel;
+export function pitMenuToggleTires() {
+  if (!isPitMenuOpen()) return;
+  _pitChangeTires = !_pitChangeTires;
+  _renderPitMenu();
+}
+
+export function showPitMenu(currentFuel, currentTireWear, onConfirm, onCancel) {
+  _pitMaxAdd     = Math.round((1 - currentFuel) * 100);
+  _pitFuelAdd    = _pitMaxAdd;
+  _pitChangeTires = false; // default NO — player must actively choose
+  _pitOnConfirm  = onConfirm;
+  _pitOnCancel   = onCancel;
   _renderPitMenu();
 }
 
 function _renderPitMenu() {
-  const secs = (pitStopFrames(_pitFuelAdd) / 60).toFixed(1);
-  const timeStr = _pitFuelAdd === 0 ? '—' : `${secs}s`;
+  const secs = (pitStopFrames(_pitFuelAdd, _pitChangeTires) / 60).toFixed(1);
+  const timeStr = (_pitFuelAdd === 0 && !_pitChangeTires) ? '—' : `${secs}s`;
 
   pitMenuDiv.innerHTML = `
     <h2 style="margin:0 0 14px 0;color:#fff;font-size:20px;letter-spacing:2px">PIT STOP</h2>
@@ -401,7 +429,11 @@ function _renderPitMenu() {
         <button id="pm-fuel-up" style="${_btnStyle()}">+</button>
       </span>
     </div>
-    <div style="margin-bottom:10px;color:#555">Change tyres: <span style="color:#333">— (coming soon)</span></div>
+    <div style="margin-bottom:10px">
+      <span style="color:#aaa">Change tyres:</span>
+      <button id="pm-tires" style="${_btnStyle(_pitChangeTires ? 'primary' : '')}">${_pitChangeTires ? 'YES' : 'NO'}</button>
+      ${_pitChangeTires ? '<span style="color:#888;margin-left:6px">+1.0s</span>' : ''}
+    </div>
     <div style="margin-bottom:16px;font-size:13px;color:#aaa">
       Stop time: <span style="color:#FF8800">${timeStr}</span>
     </div>
@@ -415,6 +447,7 @@ function _renderPitMenu() {
   // Touch / mouse fallbacks — the real input goes through S.input in gameLoop
   pitMenuDiv.querySelector('#pm-fuel-dn').addEventListener('click', () => pitMenuStep(-5));
   pitMenuDiv.querySelector('#pm-fuel-up').addEventListener('click', () => pitMenuStep(+5));
+  pitMenuDiv.querySelector('#pm-tires').addEventListener('click', pitMenuToggleTires);
   pitMenuDiv.querySelector('#pm-go').addEventListener('click', confirmPitMenu);
   pitMenuDiv.querySelector('#pm-cancel').addEventListener('click', dismissPitMenu);
 }
@@ -440,6 +473,63 @@ export function showLabels() {
 // ------------------------------------------------------------------
 // Minimap
 // ------------------------------------------------------------------
+export function updatePowerupIndicators(playerX, playerY, playerTrackIdx, zoom, screenW, screenH, powerups) {
+  powerupIndicators.innerHTML = '';
+  const MAX_DIST = 2500;
+  const MARGIN = 0;             // flush with edge
+  const centerX = screenW / 2;
+  const centerY = screenH / 2;
+  const n = S.trackSamples;
+
+  for (const p of powerups) {
+    const pIdx = p._trackIdx ?? 0;
+    const ahead = (pIdx - playerTrackIdx + n) % n;
+    if (ahead === 0 || ahead > n * 0.5) continue;
+
+    const dx = p.x - playerX;
+    const dy = p.y - playerY;
+    const dist = Math.hypot(dx, dy);
+    if (dist > MAX_DIST) continue;
+
+    const screenX = centerX + dx * zoom;
+    const screenY = centerY + dy * zoom;
+
+    const onScreen = screenX > 2 && screenX < screenW - 2 &&
+                     screenY > 2 && screenY < screenH - 2;
+    if (onScreen) continue;
+
+    const rdx = screenX - centerX;
+    const rdy = screenY - centerY;
+    const absRdx = Math.abs(rdx);
+    const absRdy = Math.abs(rdy);
+    const scaleX = absRdx < 0.001 ? Infinity : centerX / absRdx;
+    const scaleY = absRdy < 0.001 ? Infinity : centerY / absRdy;
+    const scale = Math.min(scaleX, scaleY);
+
+    const ix = centerX + rdx * scale;
+    const iy = centerY + rdy * scale;
+
+    const el = document.createElement('div');
+    const color = p.type === 'S' ? '#00FF88' : '#FF8800';
+    // Determine which screen edge we hit, and align the bar to that edge (never rotated)
+    const hitLeft   = ix <= 4;
+    const hitRight  = ix >= screenW - 4;
+    const hitTop    = iy <= 4;
+    const onVerticalEdge = hitLeft || hitRight;
+    const barW = onVerticalEdge ? 7 : 24;
+    const barH = onVerticalEdge ? 24 : 7;
+    const left = hitLeft ? 0 : hitRight ? screenW - barW : ix - barW / 2;
+    const top  = hitTop  ? 0 : (iy >= screenH - 4 ? screenH - barH : iy - barH / 2);
+    el.style.cssText = `
+      position:absolute;left:${left}px;top:${top}px;
+      width:${barW}px;height:${barH}px;border-radius:3px;
+      background:${color};box-shadow:0 0 12px ${color}, 0 0 4px ${color};
+      pointer-events:none;
+    `;
+    powerupIndicators.appendChild(el);
+  }
+}
+
 export function updateMinimap() {
   S.minimap.x = S.app.screen.width - S.MAP_W - 16;
   S.minimap.y = S._isMobile ? 16 : S.app.screen.height - S.MAP_W - 16;

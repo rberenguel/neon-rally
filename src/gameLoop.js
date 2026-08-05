@@ -4,12 +4,12 @@ import { updateCarPhysics } from './car.js';
 import { updateCarSprite, updateCamera, shakeOnBump, updateShake } from './renderer.js';
 import { updateWaypointAI, updateSplineAI, resolveCollisions, computeDraftBoost, recordOffTrackEpisode } from './ai.js';
 import { spawnPowerup, updatePowerups, tickBoosts, activatePowerup, resetPowerupRng } from './powerups.js';
-import { dismissControls, orientationDiv, lapDiv, deltaDiv, powerupHud, speedHud, fuelHud, fuelBarFill, fuelFlowLabel, fuelPctLabel, pitZoneDiv, showPitMenu, dismissPitMenu, confirmPitMenu, isPitMenuOpen, pitMenuStep, pitStopFrames, debugDiv, labelDivs, showAnnounce, showLabels, updateMinimap, formatTime, challengeDelta, encodeChallenge, showFinishedOverlay } from './hud.js';
+import { dismissControls, orientationDiv, lapDiv, deltaDiv, powerupHud, speedHud, fuelHud, fuelBarFill, fuelFlowLabel, fuelPctLabel, tireWearLabel, powerupIndicators, pitZoneDiv, showPitMenu, dismissPitMenu, confirmPitMenu, isPitMenuOpen, pitMenuStep, pitMenuToggleTires, pitStopFrames, debugDiv, labelDivs, showAnnounce, showLabels, updateMinimap, updatePowerupIndicators, formatTime, challengeDelta, encodeChallenge, showFinishedOverlay } from './hud.js';
 import { getRaceProgress, getLeader, getColorName, advanceToNextTrack, endSession } from './race.js';
 import { isRemapping } from './controls.js';
 import { seedToTrackId } from './track.js';
 
-const BUMP_DIST = 16;
+const BUMP_DIST = 26;
 
 function ordinal(n) {
   const v = n % 100;
@@ -27,9 +27,11 @@ function emitCarEffects(car, state, slipThreshold, skids, particles) {
   const rrx = car.x + rearX * 10 + rightX * 8;
   const rry = car.y + rearY * 10 + rightY * 8;
 
+  const skidWidth = 1 + (car.tireWear || 0) * 2; // 1 → 3 as wear increases
+
   if (state.speed > 2 && state.slip > slipThreshold && car._prevLrx !== undefined) {
-    skids.emitSeg(car._prevLrx, car._prevLry, lrx, lry, state.onTrack);
-    skids.emitSeg(car._prevRrx, car._prevRry, rrx, rry, state.onTrack);
+    skids.emitSeg(car._prevLrx, car._prevLry, lrx, lry, state.onTrack, skidWidth);
+    skids.emitSeg(car._prevRrx, car._prevRry, rrx, rry, state.onTrack, skidWidth);
   }
   car._prevLrx = lrx; car._prevLry = lry;
   car._prevRrx = rrx; car._prevRry = rry;
@@ -100,9 +102,11 @@ export function startGameLoop() {
         S.paused = true;
         showPitMenu(
           S.player.fuel ?? 1,
-          (fuelPct) => {
+          S.player.tireWear ?? 0,
+          (fuelPct, changeTires) => {
             S._pitFuelToAdd = fuelPct;
-            S._pitStopTimer = pitStopFrames(fuelPct * 100);
+            S._pitChangeTires = changeTires;
+            S._pitStopTimer = pitStopFrames(fuelPct * 100, changeTires);
             S._pitActive = true;
             S.paused = false;
             const lapsLeft = S.raceConfig.totalLaps - S.player.lap - 1;
@@ -184,9 +188,11 @@ export function startGameLoop() {
           S.paused = true;
           showPitMenu(
             S.player.fuel ?? 1,
-            (fuelPct) => {
+            S.player.tireWear ?? 0,
+            (fuelPct, changeTires) => {
               S._pitFuelToAdd = fuelPct;
-              S._pitStopTimer = pitStopFrames(fuelPct * 100);
+              S._pitChangeTires = changeTires;
+              S._pitStopTimer = pitStopFrames(fuelPct * 100, changeTires);
               S._pitActive = true;
               S.paused = false;
               const lapsLeft = S.raceConfig.totalLaps - S.player.lap - 1;
@@ -210,6 +216,7 @@ export function startGameLoop() {
         S._pitStopTimer -= dt;
         if (S._pitStopTimer <= 0) {
           S.player.fuel = Math.min(1, (S.player.fuel ?? 0) + S._pitFuelToAdd);
+          if (S._pitChangeTires) { S.player.tireWear = 0; S._pitChangeTires = false; }
           S._pitActive = false;
           S._pitFuelToAdd = 0;
           S._pitInvulTimer = 120;
@@ -458,7 +465,8 @@ export function startGameLoop() {
           const on = isOnTrack(c.x, c.y, S.trackCenterline) ? 'ON' : 'OFF';
           const idx = c._trackIdx !== undefined ? c._trackIdx : '?';
           const prog = (c.lap + (c._trackIdx || 0) / S.trackSamples).toFixed(3);
-          dbg += `${name}: lap=${c.lap} idx=${idx} prog=${prog} ${on}<br>`;
+          const tire = c.isPlayer ? ` grip=${Math.round(Math.max(0,(1-(c.tireWear||0)*0.8))*100)}%` : '';
+          dbg += `${name}: lap=${c.lap} idx=${idx} prog=${prog} ${on}${tire}<br>`;
         }
         debugDiv.innerHTML = dbg;
       }
@@ -477,7 +485,7 @@ export function startGameLoop() {
         powerupHud.style.display = 'none';
       }
 
-      // Fuel HUD
+      // Fuel + Tire HUD
       if (S.mode?.hasFuel && fuelHud) {
         fuelHud.style.display = 'block';
         const fuel = S.player.fuel ?? 1;
@@ -492,8 +500,20 @@ export function startGameLoop() {
       } else if (fuelHud) {
         fuelHud.style.display = 'none';
       }
+      if (S.mode?.hasTireWear && tireWearLabel) {
+        const tw = S.player.tireWear ?? 0;
+        const gripPct = Math.round(Math.max(0, (1 - tw * 0.8)) * 100);
+        const twColor = gripPct < 30 ? '#FF4444' : gripPct < 60 ? '#FF8800' : '#00FFFF';
+        tireWearLabel.textContent = `GRIP ${gripPct}%`;
+        tireWearLabel.style.color = twColor;
+      } else if (tireWearLabel) {
+        tireWearLabel.textContent = '';
+      }
 
       updateMinimap();
+
+      // --- POWERUP PROXIMITY INDICATORS ---
+      updatePowerupIndicators(S.player.x, S.player.y, S.player._trackIdx ?? 0, S.ZOOM, S.app.screen.width, S.app.screen.height, S.powerupLayer.powerups);
     }
   });
 }

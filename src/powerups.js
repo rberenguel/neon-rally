@@ -58,6 +58,7 @@ function spawnPowerup(layer, trackCenterline) {
         y: pt.y + py * offset,
         type,
         sprite: _makeSprite(type),
+        _trackIdx: idx,
     };
     powerup.sprite.x = powerup.x;
     powerup.sprite.y = powerup.y;

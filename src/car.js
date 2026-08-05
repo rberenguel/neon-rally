@@ -22,6 +22,7 @@ export function createCar(x, y, rotation, color = 0x00FFFF) {
         sprite: null,
         fuel: 1.0,
         fuelFlow: 0,  // -1 conserve · 0 balanced · 1 push
+        tireWear: 0,  // 0 fresh → 1 bald (GP mode only)
     };
 }
 
@@ -40,6 +41,22 @@ export function updateCarPhysics(car, dt, steer, gas, isOnTrackFn, arena) {
     // Forward vector
     const forwardX = Math.cos(car.rotation - Math.PI / 2);
     const forwardY = Math.sin(car.rotation - Math.PI / 2);
+
+    // Slip metrics (computed early for tire wear)
+    const dot = car.vx * forwardX + car.vy * forwardY;
+    const cross = car.vx * forwardY - car.vy * forwardX;
+    const slip = Math.abs(Math.atan2(cross, dot));
+    const turnSign = Math.sign(cross);
+    const movingForward = dot > 0;
+
+    // --- TIRE WEAR (player only for now) ---
+    const TIRE_WEAR_RATE = 0.00008;
+    if (car.isPlayer) {
+        const cornerSeverity = Math.min(slip, 1.2) * speedFactor; // honest lateral load proxy
+        const surfaceWearMult = onTrack ? 1.0 : 0.5; // half wear rate off-track
+        car.tireWear = Math.min(1, car.tireWear + TIRE_WEAR_RATE * cornerSeverity * surfaceWearMult * dt);
+    }
+    const tireGripMult = (car.isPlayer && car.tireWear > 0) ? (1 - car.tireWear * 0.8) : 1.0;
 
     // Fuel-flow multipliers and weight
     const fuelFlow    = car.isPlayer ? (car.fuelFlow ?? 0) : 0;
@@ -100,6 +117,7 @@ export function updateCarPhysics(car, dt, steer, gas, isOnTrackFn, arena) {
             const steerFactor = Math.max(0.2, 1 - Math.abs(steer) * speedFactor);
             surfaceGrip *= steerFactor;
         }
+        surfaceGrip *= tireGripMult; // tire wear reduces grip for player
         car.vx += (idealVx - car.vx) * surfaceGrip * dt;
         car.vy += (idealVy - car.vy) * surfaceGrip * dt;
     }
@@ -136,13 +154,6 @@ export function updateCarPhysics(car, dt, steer, gas, isOnTrackFn, arena) {
     car.vz -= 0.5 * dt;
     car.z += car.vz * dt;
     if (car.z < 0) { car.z = 0; car.vz = 0; }
-
-    // Slip metrics for renderer
-    const dot = car.vx * forwardX + car.vy * forwardY;
-    const cross = car.vx * forwardY - car.vy * forwardX;
-    const slip = Math.abs(Math.atan2(cross, dot));
-    const turnSign = Math.sign(cross);
-    const movingForward = dot > 0;
 
     return { speed, speedFactor, onTrack: zone > 0, forwardX, forwardY, dot, cross, slip, turnSign, movingForward, steerInput: steer };
 }

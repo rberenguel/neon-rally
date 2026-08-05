@@ -73,6 +73,7 @@ export const S = {
   _pitActive: false,
   _pitStopTimer: 0,
   _pitFuelToAdd: 0,
+  _pitChangeTires: false,
   _pitInvulTimer: 0,
 
   // Powerups

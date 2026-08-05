@@ -144,8 +144,8 @@ export function initSkids() {
     let segments = [];
     const MAX_SEGMENTS = 2000;
 
-    function emitSeg(x1, y1, x2, y2, onTrack = true) {
-        segments.push({ x1, y1, x2, y2, age: 0, onTrack });
+    function emitSeg(x1, y1, x2, y2, onTrack = true, width = 1) {
+        segments.push({ x1, y1, x2, y2, age: 0, onTrack, width });
     }
 
     function clear() {
@@ -177,11 +177,13 @@ export function initSkids() {
             const bucketAlpha = (b + 0.5) / 8;
             if (onBuckets[b].length > 0) {
                 for (const s of onBuckets[b]) { graphics.moveTo(s.x1, s.y1); graphics.lineTo(s.x2, s.y2); }
-                graphics.stroke({ width: 2, color: skidColor, alpha: bucketAlpha * 0.25 });
+                const avgW = onBuckets[b].reduce((sum, s) => sum + (s.width || 1), 0) / onBuckets[b].length;
+                graphics.stroke({ width: 2 * avgW, color: skidColor, alpha: bucketAlpha * 0.25 });
             }
             if (offBuckets[b].length > 0) {
                 for (const s of offBuckets[b]) { graphics.moveTo(s.x1, s.y1); graphics.lineTo(s.x2, s.y2); }
-                graphics.stroke({ width: 2, color: skidColor, alpha: bucketAlpha * 0.15 });
+                const avgW = offBuckets[b].reduce((sum, s) => sum + (s.width || 1), 0) / offBuckets[b].length;
+                graphics.stroke({ width: 2 * avgW, color: skidColor, alpha: bucketAlpha * 0.15 });
             }
         }
     }

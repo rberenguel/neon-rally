@@ -48,6 +48,7 @@ export function resetCarsForNewRace() {
   S.player.vx = 0; S.player.vy = 0;
   S.player._lapDelta = 0; S.player._finishOrder = 0;
   S.player.fuel = 1.0; S.player.fuelFlow = 0; S._fuelWarningShown = false;
+  S.player.tireWear = 0;
   S.player._physicsLogFrame = undefined; S.player._logAccel = false;
   for (const ai of S.aiCars) { ai._physicsLogFrame = undefined; ai._logAccel = false; }
   S._inPitZone = false; S._pitActive = false; S._pitStopTimer = 0; S._pitFuelToAdd = 0; S._pitInvulTimer = 0;
