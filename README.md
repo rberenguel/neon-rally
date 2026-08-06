@@ -184,8 +184,3 @@ Minimap thumbnail. Track ID. Difficulty label. Lap count. Finish time. Final pla
 - The game loop runs at 45 fps to keep frame times stable.
 - The service worker caches all assets. Use `Ctrl+Shift+R` to bypass the cache during development.
 
----
-
-## License
-
-MIT
