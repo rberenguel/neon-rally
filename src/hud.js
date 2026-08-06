@@ -60,14 +60,14 @@ export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) 
     background: rgba(0,0,0,0.88);
     border: 2px solid #00FFFF;
     border-radius: 8px;
-    padding: 16px 20px;
+    padding: ${_isMobile ? '12px 10px' : '16px 20px'};
     color: #00FFFF;
     font-family: monospace;
     font-size: clamp(12px, 2.5vw, 16px);
     text-align: center;
     z-index: 5000;
     line-height: 1.6;
-    max-width: min(90vw, 480px);
+    max-width: ${_isMobile ? '98vw' : 'min(90vw, 480px)'};
     max-height: 85vh;
     overflow-y: auto;
     box-sizing: border-box;
@@ -235,9 +235,9 @@ export function initHud({ _isMobile, challengeTime, challengeLaps, onDismiss }) 
   finishedDiv.style.cssText = `
     position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
     background:rgba(0,0,0,0.88);border:2px solid #00FFFF;border-radius:8px;
-    padding:16px 20px;color:#00FFFF;font-family:monospace;font-size:clamp(12px,2.5vw,16px);
+    padding:20px 24px;color:#00FFFF;font-family:monospace;font-size:clamp(12px,2.5vw,16px);
     text-align:center;z-index:5000;line-height:1.7;display:none;
-    width:min(90vw,420px);max-height:85vh;overflow-y:auto;box-sizing:border-box;
+    width:min(98vw,480px);max-height:88vh;overflow-y:auto;box-sizing:border-box;
   `;
   document.body.appendChild(finishedDiv);
 
@@ -305,18 +305,110 @@ export function dismissControls() {
   S.controlsAcknowledged = true;
 }
 
-export function showFinishedOverlay(rank, timeStr, challengeStr, shareUrl, sessionCount, onNext, onEnd) {
+export function showFinishedOverlay(rank, timeStr, challengeStr, shareUrl, sessionCount, standings, trackCenterline, onNext, onEnd) {
   const place = `${rank}${rank === 1 ? 'st' : rank === 2 ? 'nd' : rank === 3 ? 'rd' : 'th'}`;
   const challengeBlock = challengeStr ? `<div style="margin:6px 0;font-size:15px">${challengeStr}</div>` : '';
   const kAct = rmap(keyMap)['activate'] ?? 'Z';
   const bAct = rmap(buttonMap)['activate'] ?? 'b:2';
+
+  // Build minimap canvas with track + finish line + top 3 car positions
+  let mapHtml = '';
+  if (trackCenterline?.length) {
+    const cvs = document.createElement('canvas');
+    cvs.width = 280; cvs.height = 100;
+    const ctx = cvs.getContext('2d');
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of trackCenterline) {
+      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    }
+    const PAD = 6;
+    const rangeX = maxX - minX || 1;
+    const rangeY = maxY - minY || 1;
+    const sc = Math.min((cvs.width - PAD*2) / rangeX, (cvs.height - PAD*2) / rangeY);
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+
+    ctx.save();
+    ctx.translate(cvs.width/2, cvs.height/2);
+    ctx.scale(sc, sc);
+    ctx.translate(-cx, -cy);
+
+    // Track line
+    ctx.beginPath();
+    ctx.moveTo(trackCenterline[0].x, trackCenterline[0].y);
+    for (let i = 1; i < trackCenterline.length; i++) ctx.lineTo(trackCenterline[i].x, trackCenterline[i].y);
+    ctx.closePath();
+    ctx.globalAlpha = 0.25;
+    ctx.strokeStyle = '#00FFFF';
+    ctx.lineWidth = 10 / sc;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(trackCenterline[0].x, trackCenterline[0].y);
+    for (let i = 1; i < trackCenterline.length; i++) ctx.lineTo(trackCenterline[i].x, trackCenterline[i].y);
+    ctx.closePath();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#00FFFF';
+    ctx.lineWidth = 2.5 / sc;
+    ctx.stroke();
+
+    // Finish line marker (start/finish point)
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#FFD700';
+    ctx.beginPath();
+    ctx.arc(trackCenterline[0].x, trackCenterline[0].y, 5/sc, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 1.5/sc;
+    ctx.beginPath();
+    ctx.moveTo(trackCenterline[0].x - 8/sc, trackCenterline[0].y);
+    ctx.lineTo(trackCenterline[0].x + 8/sc, trackCenterline[0].y);
+    ctx.stroke();
+
+    // Top 3 finishers as dots on the track at their finish positions
+    const top3 = standings.slice(0, 3);
+    const dotSize = 4.5 / sc;
+    const labelOff = [ { dx: 0, dy: -10/sc }, { dx: 10/sc, dy: 0 }, { dx: 0, dy: 10/sc } ];
+    top3.forEach((c, i) => {
+      const pt = trackCenterline[c._trackIdx || 0];
+      const hex = '#' + c.color.toString(16).padStart(6, '0');
+      // Glow
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = hex;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, dotSize * 1.8, 0, Math.PI*2);
+      ctx.fill();
+      // Solid dot
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = hex;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, dotSize, 0, Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1/sc;
+      ctx.stroke();
+      // Rank label
+      ctx.fillStyle = '#fff';
+      ctx.font = `${7/sc}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const off = labelOff[i] || labelOff[0];
+      ctx.fillText(String(i+1), pt.x + off.dx, pt.y + off.dy);
+    });
+
+    ctx.restore();
+    mapHtml = `<img src="${cvs.toDataURL()}" style="width:100%;height:100px;border-radius:4px;margin:10px 0;display:block;object-fit:contain;background:#050510;">`;
+  }
+
   finishedDiv.innerHTML = `
     <h2 style="margin:0 0 10px 0;color:#fff;font-size:22px;letter-spacing:2px">RACE FINISHED</h2>
     <div style="font-size:11px;color:#00FFFF88;margin-bottom:6px">Race ${sessionCount} of session</div>
     <div style="font-size:28px;font-weight:bold;color:#FFD700;margin:4px 0">${place} Place</div>
     <div style="font-size:22px;color:#FFD700;margin:4px 0">${timeStr}</div>
     ${challengeBlock}
-    <hr style="border:none;border-top:1px solid #00FFFF44;margin:14px 0">
+    ${mapHtml}
+    <hr style="border:none;border-top:1px solid #00FFFF44;margin:12px 0">
     <div style="font-size:13px;color:#aaa;margin-bottom:6px">Challenge a friend — share this run:</div>
     <div style="display:flex;gap:6px;justify-content:center;align-items:center;margin-bottom:14px">
       <input id="share-url" readonly value="${shareUrl}"

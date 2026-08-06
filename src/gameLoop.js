@@ -368,6 +368,7 @@ export function startGameLoop() {
             ? `${location.origin}${location.pathname}#track=${trackId}&challenge=${challenge}`
             : location.href;
           if (trackId) history.replaceState(null, '', `#track=${trackId}&challenge=${challenge}`);
+          const standings = [...S.allCars].sort((a, b) => getRaceProgress(b) - getRaceProgress(a));
           S.sessionRaces.push({
             trackId,
             difficulty: S.player.trackDifficulty,
@@ -376,7 +377,7 @@ export function startGameLoop() {
             rank,
             points: S.trackCenterline.map(p => ({ x: p.x, y: p.y })),
           });
-          showFinishedOverlay(rank, timeStr, challengeStr, shareUrl, S.sessionRaces.length, advanceToNextTrack, endSession);
+          showFinishedOverlay(rank, timeStr, challengeStr, shareUrl, S.sessionRaces.length, standings, S.trackCenterline, advanceToNextTrack, endSession);
           lapDiv.textContent = '';
           deltaDiv.style.display = 'none';
         } else if (S._pitActive) {

@@ -71,7 +71,7 @@ export async function generateSessionCanvas(races) {
         document.fonts.load('14px "Phosphor-Light"'),
     ]);
     const CARD_W = 180, MAP_H = 118, STATS_H = 95, CARD_H = MAP_H + STATS_H;
-    const GAP = 14, PAD = 22;
+    const GAP = 14, PAD = 30;
     const HEADER_H = 76, FOOTER_H = 50;
     const COLS = Math.min(3, races.length);
     const ROWS = Math.ceil(races.length / COLS);

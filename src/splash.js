@@ -69,19 +69,25 @@ export function showSplash() {
             `;
             document.head.appendChild(fontStyle);
 
+            const titleWrap = document.createElement('div');
+            titleWrap.style.cssText = `
+                position:fixed;inset:0;
+                display:flex;flex-direction:column;
+                align-items:center;justify-content:flex-start;
+                padding-top:12vh;
+                pointer-events:none;z-index:102;
+            `;
             const title = document.createElement('div');
             title.style.cssText = `
-                position:absolute;top:50%;left:50%;
-                transform:translate(-50%,-270%);
                 color:#00FFFF;font-family:'Sixtyfour',monospace;
                 font-size:clamp(32px,8vw,80px);font-weight:400;
                 letter-spacing:.08em;
                 text-shadow:0 0 18px #00FFFF,0 0 40px #00FFFF88;
-                pointer-events:none;z-index:102;
                 text-align:center;white-space:nowrap;
             `;
             title.textContent = 'NEON RALLY';
-            document.body.appendChild(title);
+            titleWrap.appendChild(title);
+            document.body.appendChild(titleWrap);
 
             // Particles (world-space, drawn by PixiJS below the cars)
             const particles = [];
@@ -153,7 +159,7 @@ export function showSplash() {
                 if (dismissed) return;
                 dismissed = true;
                 splashApp.destroy({ removeView: true });
-                title.remove();
+                titleWrap.remove();
                 fontStyle.remove();
                 resolve();
             }

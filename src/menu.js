@@ -106,23 +106,24 @@ export function showModeSelect() {
             resolve(MODES[idx]);
         }
 
+        let navCooldown = 0;
         function onKey(e) {
             if (!inputReady) return;
-            if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')    { e.preventDefault(); setSelected(selectedIdx - 1); }
-            if (e.key === 'ArrowRight' || e.key === 'ArrowDown')   { e.preventDefault(); setSelected(selectedIdx + 1); }
+            if (navCooldown > 0) return;
+            if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')    { e.preventDefault(); setSelected(selectedIdx - 1); navCooldown = 5; }
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown')   { e.preventDefault(); setSelected(selectedIdx + 1); navCooldown = 5; }
             if (e.key === 'Enter' || e.key === ' ')                { e.preventDefault(); pickIdx(selectedIdx); }
         }
         document.addEventListener('keydown', onKey);
 
         const menuInput = { steerLeft: false, steerRight: false, gas: false, activate: false, pause: false };
         const pollControls = makeControlHandler(menuInput);
-        let navCooldown = 0;
         const gpPoll = setInterval(() => {
             menuInput.steerLeft = menuInput.steerRight = menuInput.gas = menuInput.activate = false;
             pollControls();
             if (!inputReady || navCooldown > 0) { navCooldown = Math.max(0, navCooldown - 1); return; }
-            if (menuInput.steerLeft)  { setSelected(selectedIdx - 1); navCooldown = 4; }
-            if (menuInput.steerRight) { setSelected(selectedIdx + 1); navCooldown = 4; }
+            if (menuInput.steerLeft)  { setSelected(selectedIdx - 1); navCooldown = 5; }
+            if (menuInput.steerRight) { setSelected(selectedIdx + 1); navCooldown = 5; }
             if (menuInput.gas || menuInput.activate) { pickIdx(selectedIdx); }
         }, 80);
 
@@ -229,23 +230,24 @@ export function showTrackSelect(canEndSession, hideEl = null) {
             else resolve({ endSession: true });
         }
 
+        let navCooldown = 0;
         function onKey(e) {
-            if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')    { e.preventDefault(); setSelected(selectedIdx - 1); }
-            if (e.key === 'ArrowRight' || e.key === 'ArrowDown')   { e.preventDefault(); setSelected(selectedIdx + 1); }
+            if (navCooldown > 0) return;
+            if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')    { e.preventDefault(); setSelected(selectedIdx - 1); navCooldown = 5; }
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown')   { e.preventDefault(); setSelected(selectedIdx + 1); navCooldown = 5; }
             if (e.key === 'Enter' || e.key === ' ')                { e.preventDefault(); pickIdx(selectedIdx); }
         }
         document.addEventListener('keydown', onKey);
 
         // Use the game's own control handler
-        let navCooldown = 0;
         const menuInput = { steerLeft: false, steerRight: false, gas: false, activate: false, pause: false };
         const pollControls = makeControlHandler(menuInput);
         const gpPoll = setInterval(() => {
             menuInput.steerLeft = menuInput.steerRight = menuInput.gas = menuInput.activate = false;
             pollControls();
             if (navCooldown > 0) { navCooldown--; return; }
-            if (menuInput.steerLeft)  { setSelected(selectedIdx - 1); navCooldown = 4; }
-            if (menuInput.steerRight) { setSelected(selectedIdx + 1); navCooldown = 4; }
+            if (menuInput.steerLeft)  { setSelected(selectedIdx - 1); navCooldown = 5; }
+            if (menuInput.steerRight) { setSelected(selectedIdx + 1); navCooldown = 5; }
             if (menuInput.gas) { pickIdx(selectedIdx); }
         }, 80);
 
