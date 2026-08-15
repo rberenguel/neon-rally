@@ -691,10 +691,23 @@ export function formatTime(frames) {
 // PWA banner
 // ------------------------------------------------------------------
 export function setupPwaBanner() {
-  const _isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone;
-  const _isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-  if (_isStandalone) return;
+  const isStandaloneIOS = window.navigator.standalone === true;
+  const isStandaloneAndroid = window.matchMedia('(display-mode: standalone)').matches;
+  if (isStandaloneIOS || isStandaloneAndroid) return;
 
+  const isMobileDevice = /android|iphone|ipad|ipod|mobi/i.test(navigator.userAgent.toLowerCase());
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+  // Show banner immediately on mobile browsers (don't wait for beforeinstallprompt,
+  // which is unreliable and may never fire).
+  if (isMobileDevice) {
+    installBanner.textContent = isIOS
+      ? 'Tap Share → Add to Home Screen to install'
+      : 'Install App';
+    installBanner.style.display = 'block';
+  }
+
+  // Also capture beforeinstallprompt for native install button on browsers that support it.
   window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault();
     _deferredInstall = e;
@@ -703,21 +716,13 @@ export function setupPwaBanner() {
   });
 
   installBanner.addEventListener('click', async () => {
-    if (_isIOS) { installBanner.style.display = 'none'; return; }
+    if (isIOS) { installBanner.style.display = 'none'; return; }
     if (!_deferredInstall) return;
     _deferredInstall.prompt();
     const { outcome } = await _deferredInstall.userChoice;
     installBanner.style.display = 'none';
     _deferredInstall = null;
   });
-
-  if (_isIOS) {
-    setTimeout(() => {
-      installBanner.textContent = 'Tap Share → Add to Home Screen to install';
-      installBanner.style.display = 'block';
-      setTimeout(() => { installBanner.style.display = 'none'; }, 6000);
-    }, 2000);
-  }
 
   window.addEventListener('appinstalled', () => { installBanner.style.display = 'none'; });
 }
